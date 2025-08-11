@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* カスタムスタイル */
+@layer base {
+  html {
+    font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans CJK JP', 'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  /* タッチデバイス用のボタン最小サイズ */
+  .btn-touch {
+    @apply min-h-[44px] min-w-[44px];
+  }
+  
+  /* ナンプレグリッドのカスタムスタイル */
+  .sudoku-cell {
+    @apply aspect-square flex items-center justify-center text-lg font-semibold;
+    @apply border border-gray-400;
+    @apply transition-colors duration-150;
+  }
+  
+  .sudoku-cell:nth-child(3n) {
+    @apply border-r-2 border-r-gray-800;
+  }
+  
+  .sudoku-cell:nth-child(n):nth-child(-n+9) {
+    @apply border-t-2 border-t-gray-800;
+  }
+  
+  .sudoku-cell:nth-child(n+19):nth-child(-n+27) {
+    @apply border-b-2 border-b-gray-800;
+  }
+  
+  .sudoku-cell:nth-child(n+46):nth-child(-n+54) {
+    @apply border-b-2 border-b-gray-800;
+  }
+  
+  .sudoku-cell:nth-child(n+73) {
+    @apply border-b-2 border-b-gray-800;
+  }
+}
+
+@layer utilities {
+  /* スクロール禁止（モーダル表示時など） */
+  .no-scroll {
+    @apply overflow-hidden;
+  }
+  
+  /* セーフエリア対応 */
+  .safe-area-inset {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  
+  /* アニメーション */
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  .slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* プログレッシブウェブアプリ対応 */
+@media (display-mode: standalone) {
+  body {
+    @apply safe-area-inset;
+  }
+}
