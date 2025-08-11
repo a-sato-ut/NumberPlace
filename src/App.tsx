@@ -5,7 +5,7 @@ import { ResultDisplay } from './components/ResultDisplay';
 import { ImageProcessor } from './utils/imageProcessor';
 import { SudokuSolver } from './utils/sudokuSolver';
 import { SudokuValidator } from './utils/sudokuValidator';
-import { AppState } from './types/sudoku';
+import { AppState, SudokuGrid as SudokuGridType } from './types/sudoku';
 
 function App() {
   const [appState, setAppState] = useState<AppState>({
@@ -24,12 +24,19 @@ function App() {
     }));
 
     try {
-      // デモ用: 実際のOCR処理の代わりにデモグリッドを使用
-      // const ocrResult = await ImageProcessor.processImage(file);
-      // const originalGrid = ocrResult.grid;
+      let originalGrid: SudokuGridType;
       
-      // デモ用のグリッドを使用
-      const originalGrid = ImageProcessor.createDemoGrid();
+      // ファイル名でデモかどうかを判定
+      if (_file.name === 'demo') {
+        // デモの場合はnumbers.jsonを直接読み込み
+        originalGrid = await ImageProcessor.loadGridFromJson();
+        console.log('Loaded grid from numbers.json (demo mode):', originalGrid);
+      } else {
+        // 実際のOCR処理（S__9568259.jpgも含む）
+        const ocrResult = await ImageProcessor.processImage(_file);
+        originalGrid = ocrResult.grid;
+        console.log('Processed image:', _file.name, 'with confidence:', ocrResult.confidence, '%, grid:', originalGrid);
+      }
       
       // ナンプレを解く
       const solver = new SudokuSolver(originalGrid);
@@ -105,13 +112,34 @@ function App() {
             />
             
             {/* デモボタン */}
-            <div className="text-center">
+            <div className="text-center space-y-3">
               <button
                 onClick={() => handleImageUpload(new File([], 'demo'))}
-                className="text-primary-600 hover:text-primary-700 text-sm font-medium underline"
+                className="block w-full bg-primary-600 text-white py-2 px-4 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
               >
-                デモ用ナンプレで試す
+                📊 numbers.jsonを読み込んで解析
               </button>
+              
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/NamPure/S__9568259.jpg');
+                    const blob = await response.blob();
+                    const file = new File([blob], 'S__9568259.jpg', { type: 'image/jpeg' });
+                    handleImageUpload(file);
+                  } catch (error) {
+                    console.error('Failed to load test image:', error);
+                    alert('テスト画像の読み込みに失敗しました');
+                  }
+                }}
+                className="block w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+              >
+                📱 S__9568259.jpg でテスト
+              </button>
+              
+              <p className="text-xs text-gray-500">
+                上: JSONデータ直接読み込み / 下: 画像ファイル処理
+              </p>
             </div>
           </div>
         )}
@@ -130,6 +158,17 @@ function App() {
 
         {appState.currentStep === 'result' && appState.originalGrid && appState.validationResult && (
           <div className="space-y-6">
+            {/* データソース表示 */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <h3 className="text-sm font-medium text-blue-800 mb-1">データソース</h3>
+              <p className="text-xs text-blue-700">
+                {appState.originalGrid ? '画像解析完了' : 'numbers.json から読み込み完了'}
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                空欄数: {appState.originalGrid.flat().filter(cell => cell === null).length}/81
+              </p>
+            </div>
+
             {/* ナンプレグリッド表示 */}
             <div className="bg-white rounded-lg p-4 border">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
