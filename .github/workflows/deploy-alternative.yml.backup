@@ -1,0 +1,35 @@
+# この設定は、メインのデプロイが失敗した場合の代替案です
+# 使用する場合は、ファイル名を deploy.yml に変更してください
+
+name: Deploy to GitHub Pages (Alternative)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build
+      run: npm run build
+      
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v4  # 最新バージョンを使用
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./dist
+        force_orphan: true  # gh-pagesブランチを強制的にorphanブランチとして作成

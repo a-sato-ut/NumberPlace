@@ -85,9 +85,26 @@ npm run deploy   # GitHub Pagesにデプロイ
 
 GitHub Pagesでの自動デプロイが設定されています：
 
+### 初回セットアップ
+
+1. **GitHub Pagesの設定**:
+   - GitHubリポジトリの「Settings」→「Pages」に移動
+   - 「Source」を「GitHub Actions」に変更
+
+2. **リポジトリ権限の確認**:
+   - 「Settings」→「Actions」→「General」に移動
+   - 「Workflow permissions」で「Read and write permissions」を選択
+
+### デプロイ手順
+
 1. `main`ブランチにプッシュ
 2. GitHub Actionsが自動でビルド＆デプロイ
 3. `https://[username].github.io/NamPure/`でアクセス可能
+
+### トラブルシューティング
+
+- **403エラー**: リポジトリのWorkflow permissionsを確認
+- **404エラー**: GitHub PagesのSourceがGitHub Actionsに設定されているか確認
 
 ## 🔧 カスタマイズ
 
