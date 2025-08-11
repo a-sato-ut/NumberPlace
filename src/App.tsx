@@ -11,6 +11,7 @@ function App() {
   const [appState, setAppState] = useState<AppState>({
     originalGrid: null,
     solvedGrid: null,
+    regions: null,
     validationResult: null,
     isLoading: false,
     currentStep: 'upload'
@@ -26,20 +27,25 @@ function App() {
     try {
       let originalGrid: SudokuGridType;
       
+      let regions = null;
+      
       // ファイル名でデモかどうかを判定
       if (_file.name === 'demo') {
-        // デモの場合はnumbers.jsonを直接読み込み
-        originalGrid = await ImageProcessor.loadGridFromJson();
-        console.log('Loaded grid from numbers.json (demo mode):', originalGrid);
+        // デモの場合はsample.jsonからジグソーナンプレを読み込み
+        const jigsawData = await ImageProcessor.loadJigsawSudokuFromJson();
+        originalGrid = jigsawData.grid;
+        regions = jigsawData.regions;
+        console.log('Loaded jigsaw sudoku from sample.json (demo mode):', originalGrid, regions);
       } else {
         // 実際のOCR処理（S__9568259.jpgも含む）
         const ocrResult = await ImageProcessor.processImage(_file);
         originalGrid = ocrResult.grid;
+        regions = ocrResult.regions;
         console.log('Processed image:', _file.name, 'with confidence:', ocrResult.confidence, '%, grid:', originalGrid);
       }
       
       // ナンプレを解く
-      const solver = new SudokuSolver(originalGrid);
+      const solver = new SudokuSolver(originalGrid, regions);
       const solvedGrid = solver.solve();
       
       if (!solvedGrid) {
@@ -47,11 +53,12 @@ function App() {
       }
 
       // 元のグリッドと解答を比較・検証
-      const validationResult = SudokuValidator.validate(originalGrid, originalGrid);
+      const validationResult = SudokuValidator.validate(originalGrid, originalGrid, regions);
 
       setAppState({
         originalGrid,
         solvedGrid,
+        regions: regions || null,
         validationResult,
         isLoading: false,
         currentStep: 'result'
@@ -71,6 +78,7 @@ function App() {
     setAppState({
       originalGrid: null,
       solvedGrid: null,
+      regions: null,
       validationResult: null,
       isLoading: false,
       currentStep: 'upload'
@@ -79,14 +87,14 @@ function App() {
 
   const handleDemoSolved = useCallback(() => {
     if (appState.solvedGrid) {
-      const validationResult = SudokuValidator.validate(appState.solvedGrid, appState.solvedGrid);
+      const validationResult = SudokuValidator.validate(appState.solvedGrid, appState.solvedGrid, appState.regions || undefined);
       setAppState(prev => ({
         ...prev,
         originalGrid: prev.solvedGrid,
         validationResult
       }));
     }
-  }, [appState.solvedGrid]);
+  }, [appState.solvedGrid, appState.regions]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -117,7 +125,7 @@ function App() {
                 onClick={() => handleImageUpload(new File([], 'demo'))}
                 className="block w-full bg-primary-600 text-white py-2 px-4 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
               >
-                📊 numbers.jsonを読み込んで解析
+                🧩 ジグソーナンプレを読み込んで解析
               </button>
               
               <button
@@ -138,7 +146,7 @@ function App() {
               </button>
               
               <p className="text-xs text-gray-500">
-                上: JSONデータ直接読み込み / 下: 画像ファイル処理
+                上: ジグソーナンプレJSONデータ読み込み / 下: 画像ファイル処理
               </p>
             </div>
           </div>
@@ -177,6 +185,7 @@ function App() {
               <SudokuGrid 
                 originalGrid={appState.originalGrid}
                 solvedGrid={appState.solvedGrid || undefined}
+                regions={appState.regions || undefined}
                 validationResult={appState.validationResult}
                 showComparison={false}
               />
@@ -204,6 +213,7 @@ function App() {
                   <SudokuGrid 
                     originalGrid={appState.originalGrid}
                     solvedGrid={appState.solvedGrid || undefined}
+                    regions={appState.regions || undefined}
                     showComparison={true}
                   />
                   <p className="text-xs text-gray-500">

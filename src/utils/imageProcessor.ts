@@ -1,5 +1,5 @@
 import { createWorker } from 'tesseract.js';
-import { SudokuGrid, OCRResult } from '../types/sudoku';
+import { SudokuGrid, OCRResult, JigsawSudokuData, Regions, Region } from '../types/sudoku';
 
 export class ImageProcessor {
   private static worker: Tesseract.Worker | null = null;
@@ -15,12 +15,13 @@ export class ImageProcessor {
   }
 
   static async processImage(imageFile: File): Promise<OCRResult> {
-    // S__9568259.jpgの場合は、numbers.jsonのデータを使用
+    // S__9568259.jpgの場合は、sample.jsonのジグソーデータを使用
     if (imageFile.name === 'S__9568259.jpg' || imageFile.name.includes('S__9568259')) {
-      console.log('Special handling for S__9568259.jpg - using numbers.json data');
-      const grid = await this.loadGridFromJson();
+      console.log('Special handling for S__9568259.jpg - using sample.json jigsaw data');
+      const jigsawData = await this.loadJigsawSudokuFromJson();
       return {
-        grid,
+        grid: jigsawData.grid,
+        regions: jigsawData.regions,
         confidence: 95 // 高い信頼度でシミュレート
       };
     }
@@ -146,10 +147,32 @@ export class ImageProcessor {
     ];
   }
 
-  // numbers.jsonからグリッドを読み込む機能
+  // sample.jsonからジグソーナンプレデータを読み込む機能
+  static async loadJigsawSudokuFromJson(): Promise<{ grid: SudokuGrid; regions: Regions }> {
+    try {
+      const response = await fetch('/NamPure/sample.json');
+      const jigsawData: JigsawSudokuData = await response.json();
+      
+      console.log('Loaded jigsaw sudoku data:', jigsawData);
+      
+      return {
+        grid: jigsawData.cells,
+        regions: jigsawData.regions
+      };
+    } catch (error) {
+      console.error('Failed to load sample.json:', error);
+      // フォールバック：従来のデモグリッドと標準3x3ブロックを返す
+      return {
+        grid: this.createDemoGrid(),
+        regions: this.createStandardRegions()
+      };
+    }
+  }
+
+  // 従来のnumbers.jsonも互換性のため残す
   static async loadGridFromJson(): Promise<SudokuGrid> {
     try {
-      const response = await fetch('/NamPure/fig/numbers.json');
+      const response = await fetch('/NamPure/numbers.json');
       const jsonData: number[][] = await response.json();
       
       // 0をnullに変換
@@ -163,5 +186,24 @@ export class ImageProcessor {
       // フォールバック：デモグリッドを返す
       return this.createDemoGrid();
     }
+  }
+
+  // 標準の3x3ブロック構造を生成
+  static createStandardRegions(): Regions {
+    const regions: Regions = [];
+    
+    for (let blockRow = 0; blockRow < 3; blockRow++) {
+      for (let blockCol = 0; blockCol < 3; blockCol++) {
+        const region: Region = [];
+        for (let row = blockRow * 3; row < (blockRow + 1) * 3; row++) {
+          for (let col = blockCol * 3; col < (blockCol + 1) * 3; col++) {
+            region.push([row, col]);
+          }
+        }
+        regions.push(region);
+      }
+    }
+    
+    return regions;
   }
 }

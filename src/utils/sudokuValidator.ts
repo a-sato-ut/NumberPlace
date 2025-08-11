@@ -1,7 +1,7 @@
-import { SudokuGrid, SudokuValidationResult } from '../types/sudoku';
+import { SudokuGrid, SudokuValidationResult, Regions } from '../types/sudoku';
 
 export class SudokuValidator {
-  static validate(originalGrid: SudokuGrid, currentGrid: SudokuGrid): SudokuValidationResult {
+  static validate(originalGrid: SudokuGrid, currentGrid: SudokuGrid, regions?: Regions): SudokuValidationResult {
     const errors: { row: number; col: number; message: string }[] = [];
 
     for (let row = 0; row < 9; row++) {
@@ -21,7 +21,7 @@ export class SudokuValidator {
 
         // 現在のセルに値がある場合、ルール違反をチェック
         if (currentValue !== null) {
-          const ruleErrors = this.checkSudokuRules(currentGrid, row, col, currentValue);
+          const ruleErrors = this.checkSudokuRules(currentGrid, row, col, currentValue, regions);
           errors.push(...ruleErrors);
         }
       }
@@ -33,7 +33,7 @@ export class SudokuValidator {
     };
   }
 
-  private static checkSudokuRules(grid: SudokuGrid, row: number, col: number, value: number): { row: number; col: number; message: string }[] {
+  private static checkSudokuRules(grid: SudokuGrid, row: number, col: number, value: number, regions?: Regions): { row: number; col: number; message: string }[] {
     const errors: { row: number; col: number; message: string }[] = [];
 
     // 行の重複チェック
@@ -60,18 +60,35 @@ export class SudokuValidator {
       }
     }
 
-    // 3x3ボックスの重複チェック
-    const boxRow = Math.floor(row / 3) * 3;
-    const boxCol = Math.floor(col / 3) * 3;
-    for (let i = boxRow; i < boxRow + 3; i++) {
-      for (let j = boxCol; j < boxCol + 3; j++) {
-        if ((i !== row || j !== col) && grid[i][j] === value) {
-          errors.push({
-            row,
-            col,
-            message: `3×3ボックス内に同じ数字${value}があります`
-          });
-          return errors; // ボックス内の重複は1つ見つかれば十分
+    // ジグソー領域の重複チェック
+    if (regions) {
+      const region = this.findRegionContaining(row, col, regions);
+      if (region) {
+        for (const [r, c] of region) {
+          if ((r !== row || c !== col) && grid[r][c] === value) {
+            errors.push({
+              row,
+              col,
+              message: `ジグソー領域内に同じ数字${value}があります`
+            });
+            return errors; // 領域内の重複は1つ見つかれば十分
+          }
+        }
+      }
+    } else {
+      // 標準の3x3ボックスチェック
+      const boxRow = Math.floor(row / 3) * 3;
+      const boxCol = Math.floor(col / 3) * 3;
+      for (let i = boxRow; i < boxRow + 3; i++) {
+        for (let j = boxCol; j < boxCol + 3; j++) {
+          if ((i !== row || j !== col) && grid[i][j] === value) {
+            errors.push({
+              row,
+              col,
+              message: `3×3ボックス内に同じ数字${value}があります`
+            });
+            return errors; // ボックス内の重複は1つ見つかれば十分
+          }
         }
       }
     }
@@ -90,7 +107,18 @@ export class SudokuValidator {
     return true;
   }
 
-  static compareGrids(originalGrid: SudokuGrid, solvedGrid: SudokuGrid): 'correct' | 'incorrect' | 'incomplete' {
+  private static findRegionContaining(row: number, col: number, regions: Regions) {
+    for (const region of regions) {
+      for (const [r, c] of region) {
+        if (r === row && c === col) {
+          return region;
+        }
+      }
+    }
+    return null;
+  }
+
+  static compareGrids(originalGrid: SudokuGrid, solvedGrid: SudokuGrid, regions?: Regions): 'correct' | 'incorrect' | 'incomplete' {
     let hasEmpty = false;
     let hasError = false;
 
@@ -110,7 +138,7 @@ export class SudokuValidator {
     if (hasError) return 'incorrect';
     if (hasEmpty) return 'incomplete';
     
-    const validation = this.validate(originalGrid, solvedGrid);
+    const validation = this.validate(originalGrid, solvedGrid, regions);
     return validation.isValid ? 'correct' : 'incorrect';
   }
 }

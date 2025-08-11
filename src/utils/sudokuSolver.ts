@@ -1,10 +1,12 @@
-import { SudokuGrid } from '../types/sudoku';
+import { SudokuGrid, Regions } from '../types/sudoku';
 
 export class SudokuSolver {
   private grid: SudokuGrid;
+  private regions: Regions;
 
-  constructor(grid: SudokuGrid) {
+  constructor(grid: SudokuGrid, regions?: Regions) {
     this.grid = grid.map(row => [...row]);
+    this.regions = regions || this.createStandardRegions();
   }
 
   solve(): SudokuGrid | null {
@@ -49,12 +51,11 @@ export class SudokuSolver {
       }
     }
 
-    // 3x3ボックスをチェック
-    const boxRow = Math.floor(row / 3) * 3;
-    const boxCol = Math.floor(col / 3) * 3;
-    for (let i = boxRow; i < boxRow + 3; i++) {
-      for (let j = boxCol; j < boxCol + 3; j++) {
-        if (this.grid[i][j] === num) {
+    // ジグソー領域をチェック
+    const region = this.findRegionContaining(row, col);
+    if (region) {
+      for (const [r, c] of region) {
+        if (this.grid[r][c] === num) {
           return false;
         }
       }
@@ -63,11 +64,24 @@ export class SudokuSolver {
     return true;
   }
 
+  private findRegionContaining(row: number, col: number) {
+    for (const region of this.regions) {
+      for (const [r, c] of region) {
+        if (r === row && c === col) {
+          return region;
+        }
+      }
+    }
+    return null;
+  }
+
   static createEmptyGrid(): SudokuGrid {
     return Array(9).fill(null).map(() => Array(9).fill(null));
   }
 
-  static isGridValid(grid: SudokuGrid): boolean {
+  static isGridValid(grid: SudokuGrid, regions?: Regions): boolean {
+    const regionData = regions || new SudokuSolver(grid).createStandardRegions();
+    
     for (let row = 0; row < 9; row++) {
       for (let col = 0; col < 9; col++) {
         const value = grid[row][col];
@@ -86,17 +100,45 @@ export class SudokuSolver {
             if (tempGrid[i][col] === value) return false;
           }
           
-          // 3x3ボックスチェック
-          const boxRow = Math.floor(row / 3) * 3;
-          const boxCol = Math.floor(col / 3) * 3;
-          for (let i = boxRow; i < boxRow + 3; i++) {
-            for (let j = boxCol; j < boxCol + 3; j++) {
-              if (tempGrid[i][j] === value) return false;
+          // ジグソー領域チェック
+          const region = SudokuSolver.findRegionContainingStatic(row, col, regionData);
+          if (region) {
+            for (const [r, c] of region) {
+              if (tempGrid[r][c] === value) return false;
             }
           }
         }
       }
     }
     return true;
+  }
+
+  static findRegionContainingStatic(row: number, col: number, regions: Regions) {
+    for (const region of regions) {
+      for (const [r, c] of region) {
+        if (r === row && c === col) {
+          return region;
+        }
+      }
+    }
+    return null;
+  }
+
+  private createStandardRegions(): Regions {
+    const regions: Regions = [];
+    
+    for (let blockRow = 0; blockRow < 3; blockRow++) {
+      for (let blockCol = 0; blockCol < 3; blockCol++) {
+        const region = [];
+        for (let row = blockRow * 3; row < (blockRow + 1) * 3; row++) {
+          for (let col = blockCol * 3; col < (blockCol + 1) * 3; col++) {
+            region.push([row, col] as [number, number]);
+          }
+        }
+        regions.push(region);
+      }
+    }
+    
+    return regions;
   }
 }

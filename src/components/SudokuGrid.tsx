@@ -1,9 +1,10 @@
 import React from 'react';
-import { SudokuGrid as SudokuGridType, SudokuValidationResult } from '../types/sudoku';
+import { SudokuGrid as SudokuGridType, SudokuValidationResult, Regions } from '../types/sudoku';
 
 interface SudokuGridProps {
   originalGrid?: SudokuGridType;
   solvedGrid?: SudokuGridType;
+  regions?: Regions;
   validationResult?: SudokuValidationResult;
   showComparison?: boolean;
 }
@@ -11,6 +12,7 @@ interface SudokuGridProps {
 export const SudokuGrid: React.FC<SudokuGridProps> = ({ 
   originalGrid, 
   solvedGrid, 
+  regions,
   validationResult,
   showComparison = false 
 }) => {
@@ -24,19 +26,38 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
     );
   }
 
+  const getRegionId = (row: number, col: number): number => {
+    if (!regions) return Math.floor(row / 3) * 3 + Math.floor(col / 3);
+    
+    for (let regionIndex = 0; regionIndex < regions.length; regionIndex++) {
+      const region = regions[regionIndex];
+      for (const [r, c] of region) {
+        if (r === row && c === col) {
+          return regionIndex;
+        }
+      }
+    }
+    return 0;
+  };
+
+  const getRegionColor = (regionId: number): string => {
+    const colors = [
+      'bg-red-50', 'bg-blue-50', 'bg-green-50', 'bg-yellow-50', 'bg-purple-50',
+      'bg-pink-50', 'bg-indigo-50', 'bg-gray-50', 'bg-orange-50'
+    ];
+    return colors[regionId % colors.length];
+  };
+
   const getCellClassName = (row: number, col: number): string => {
     let baseClasses = "aspect-square flex items-center justify-center text-lg font-semibold border ";
     
-    // グリッドの境界線
-    const borderClasses = [
-      row % 3 === 0 ? "border-t-2" : "border-t",
-      row === 8 ? "border-b-2" : "border-b",
-      col % 3 === 0 ? "border-l-2" : "border-l", 
-      col === 8 ? "border-r-2" : "border-r"
-    ].join(" ");
-    
-    baseClasses += borderClasses + " border-gray-800 ";
+    // 基本の境界線
+    baseClasses += "border border-gray-400 ";
 
+    // ジグソー領域の背景色
+    const regionId = getRegionId(row, col);
+    const regionColor = getRegionColor(regionId);
+    
     // セルの背景色
     if (showComparison && originalGrid && solvedGrid) {
       const originalValue = originalGrid[row][col];
@@ -44,21 +65,21 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
       
       if (originalValue !== null) {
         // 元々入っていた数字
-        baseClasses += "bg-gray-200 text-gray-800 ";
+        baseClasses += `${regionColor} text-gray-800 border-2 border-gray-600 `;
       } else if (solvedValue !== null) {
         // 解答で追加された数字
-        baseClasses += "bg-primary-100 text-primary-800 ";
+        baseClasses += `${regionColor} text-primary-800 border-primary-400 `;
       } else {
         // 空のセル
-        baseClasses += "bg-white ";
+        baseClasses += `${regionColor} `;
       }
     } else {
       // 通常表示
       const value = gridToShow[row][col];
       if (value !== null) {
-        baseClasses += "bg-white text-gray-900 ";
+        baseClasses += `${regionColor} text-gray-900 `;
       } else {
-        baseClasses += "bg-gray-50 text-gray-400 ";
+        baseClasses += `${regionColor} text-gray-400 `;
       }
     }
 
@@ -78,12 +99,19 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
             <div
               key={`${rowIndex}-${colIndex}`}
               className={getCellClassName(rowIndex, colIndex)}
+              title={regions ? `領域 ${getRegionId(rowIndex, colIndex) + 1}` : ''}
             >
               {cell || ''}
             </div>
           ))
         )}
       </div>
+      
+      {regions && (
+        <div className="mt-2 text-xs text-gray-600 text-center">
+          ジグソー型ナンプレ（9つの不規則な領域）
+        </div>
+      )}
       
       {validationResult && validationResult.errors.length > 0 && (
         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
