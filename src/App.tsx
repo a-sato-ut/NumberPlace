@@ -329,7 +329,11 @@ function App() {
       {/* ヘッダー */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-md mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-900 text-center">
+          <h1 
+            className="text-xl font-bold text-gray-900 text-center cursor-pointer hover:text-primary-600 transition-colors"
+            onClick={handleStartOver}
+            title="ホームに戻る"
+          >
             📱 ナンプレ解析アプリ
           </h1>
           <p className="text-sm text-gray-600 text-center mt-1">
@@ -363,176 +367,20 @@ function App() {
           </div>
         )}
 
-        {appState.currentStep === 'invalid' && appState.originalGrid && appState.validationErrors && (
+        {appState.currentStep === 'invalid' && appState.originalGrid && (
           <div className="space-y-6">
-
-
-            {/* ナンプレオーバーレイ表示 */}
-            <div className="bg-white rounded-lg p-4 border border-red-200">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
-                {isEditing ? '数字を修正中...' : '読み取った数字'}
+            {/* エラーメッセージ */}
+            <div className={`p-4 rounded-lg border ${isEditing ? 'bg-white border-black' : 'bg-red-50 border-red-200'}`}>
+              <h2 className={`text-lg font-bold mb-2 ${isEditing ? 'text-gray-800' : 'text-red-800'}`}>
+                {isEditing ? '✏️ 修正中...' : '❌ エラーがあります'}
               </h2>
-              <OverlayGrid 
-                originalGrid={editableGrid || appState.originalGrid}
-                regions={appState.regions || undefined}
-                processingSteps={appState.processingSteps}
-                editable={isEditing}
-                onCellEdit={handleCellEdit}
-              />
-            </div>
-
-            {/* エラー詳細 */}
-            <div className="bg-white p-4 rounded-lg border border-red-200">
-              <h3 className="text-sm font-medium text-red-800 mb-3">ルール違反の詳細</h3>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {appState.validationErrors.map((error, index) => (
-                  <div key={index} className="text-xs text-red-700 bg-red-50 p-2 rounded">
-                    {error}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                <p className="text-xs text-yellow-800">
-                  💡 <strong>ヒント:</strong> 読み取りエラーの可能性があります。画像の品質を確認するか、手動で正しい数字に修正してからもう一度お試しください。
-                </p>
-              </div>
-            </div>
-
-
-
-            {/* アクション */}
-            <div className="flex flex-col space-y-3">
-              {!isEditing ? (
-                <>
-                  <button
-                    onClick={handleStartEdit}
-                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                  >
-                    ✏️ 数字を修正する
-                  </button>
-                  <button
-                    onClick={handleStartOver}
-                    className="w-full bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors font-medium"
-                  >
-                    別の画像をアップロード
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handleFinishEdit}
-                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
-
-                  >
-                    ✅ 修正完了（解答する）
-                  </button>
-                  <button
-                    onClick={handleCancelEdit}
-                    className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg hover:bg-gray-700 transition-colors font-medium"
-                  >
-                    ❌ 修正をキャンセル
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 解けないナンプレの場合 */}
-        {appState.currentStep === 'unsolvable' && appState.originalGrid && (
-          <div className="space-y-6">
-
-
-            {/* ナンプレオーバーレイ表示 */}
-            <div className="bg-white rounded-lg p-4 border border-orange-200">
-              <h2 className="text-lg font-semibold text-gray-900 mb-2 text-center">
-                {isEditing ? '数字を修正中...' : '読み取り結果（解けませんでした）'}
-              </h2>
-              <p className="text-sm text-gray-600 text-center mb-4">
-                以下の数字認識結果をご確認ください。誤認識や欠落がある可能性があります。
+              <p className={`text-sm ${isEditing ? 'text-gray-700' : 'text-red-700'}`}>
+                {isEditing 
+                  ? '数字を修正中です。完了後に結果を確認できます。'
+                  : '現在入力されている数字には誤りが含まれます（読み取りエラーの可能性もあります）。'
+                }
               </p>
-              <OverlayGrid 
-                originalGrid={editableGrid || appState.originalGrid}
-                regions={appState.regions || undefined}
-                processingSteps={appState.processingSteps}
-                editable={isEditing}
-                onCellEdit={handleCellEdit}
-              />
             </div>
-
-            {/* エラー詳細説明 */}
-            <div className="bg-white rounded-lg p-4 border border-orange-200">
-              <h3 className="text-sm font-medium text-orange-800 mb-2">考えられる原因:</h3>
-              <div className="space-y-2 text-xs text-orange-700">
-                <div className="flex items-start space-x-2">
-                  <span>•</span>
-                  <span>数字の誤認識（8を6と認識、9を6と認識など）</span>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <span>•</span>
-                  <span>読み取れなかった数字がある（薄い文字、汚れなど）</span>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <span>•</span>
-                  <span>元の問題に複数解がある、または解が存在しない</span>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <span>•</span>
-                  <span>画像の向きやトリミングが不適切</span>
-                </div>
-              </div>
-            </div>
-
-
-
-            {/* アクション */}
-            <div className="flex flex-col space-y-3">
-              {!isEditing ? (
-                <>
-                  <button
-                    onClick={handleStartEdit}
-                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                  >
-                    ✏️ 数字を修正する
-                  </button>
-                  <button
-                    onClick={handleStartOver}
-                    className="w-full bg-orange-600 text-white py-3 px-4 rounded-lg hover:bg-orange-700 transition-colors font-medium"
-                  >
-                    別の画像をアップロード
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handleFinishEdit}
-                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
-
-                  >
-                    ✅ 修正完了（解答する）
-                  </button>
-                  <button
-                    onClick={handleCancelEdit}
-                    className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg hover:bg-gray-700 transition-colors font-medium"
-                  >
-                    ❌ 修正をキャンセル
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {appState.currentStep === 'result' && appState.originalGrid && (
-          <div className="space-y-6">
-            {/* 結果表示を最上部に配置 */}
-            <ResultDisplay
-              originalGrid={appState.originalGrid}
-              solvedGrid={appState.solvedGrid ?? undefined}
-              validationResult={appState.validationResult ?? undefined}
-              regions={appState.regions ?? undefined}
-              onStartOver={handleStartOver}
-            />
 
             {/* 編集ボタン */}
             <div className="flex flex-col space-y-3">
@@ -550,7 +398,140 @@ function App() {
                     className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
 
                   >
-                    ✅ 修正完了（解答する）
+                    ✅ 修正完了
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                  >
+                    ❌ 修正をキャンセル
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* ナンプレオーバーレイ表示 */}
+            <div className="bg-white rounded-lg p-4 border border-red-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+                {isEditing ? '数字を修正中...' : '検出されたナンプレ'}
+              </h2>
+              <OverlayGrid 
+                originalGrid={editableGrid || appState.originalGrid}
+                regions={appState.regions || undefined}
+                processingSteps={appState.processingSteps}
+                editable={isEditing}
+                onCellEdit={handleCellEdit}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 解けないナンプレの場合 */}
+        {appState.currentStep === 'unsolvable' && appState.originalGrid && (
+          <div className="space-y-6">
+            {/* エラーメッセージ */}
+            <div className={`p-4 rounded-lg border ${isEditing ? 'bg-white border-black' : 'bg-red-50 border-red-200'}`}>
+              <h2 className={`text-lg font-bold mb-2 ${isEditing ? 'text-gray-800' : 'text-red-800'}`}>
+                {isEditing ? '✏️ 修正中...' : '❌ エラーがあります'}
+              </h2>
+              <p className={`text-sm ${isEditing ? 'text-gray-700' : 'text-red-700'}`}>
+                {isEditing 
+                  ? '数字を修正中です。完了後に結果を確認できます。'
+                  : '現在入力されている数字には誤りが含まれます（読み取りエラーの可能性もあります）。'
+                }
+              </p>
+            </div>
+
+            {/* 編集ボタン */}
+            <div className="flex flex-col space-y-3">
+              {!isEditing ? (
+                <button
+                  onClick={handleStartEdit}
+                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  ✏️ 数字を修正する
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleFinishEdit}
+                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+
+                  >
+                    ✅ 修正完了
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                  >
+                    ❌ 修正をキャンセル
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* ナンプレオーバーレイ表示 */}
+            <div className="bg-white rounded-lg p-4 border border-orange-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2 text-center">
+                {isEditing ? '数字を修正中...' : '検出されたナンプレ'}
+              </h2>
+              <p className="text-sm text-gray-600 text-center mb-4">
+                以下の数字認識結果をご確認ください。誤認識や欠落がある可能性があります。
+              </p>
+              <OverlayGrid 
+                originalGrid={editableGrid || appState.originalGrid}
+                regions={appState.regions || undefined}
+                processingSteps={appState.processingSteps}
+                editable={isEditing}
+                onCellEdit={handleCellEdit}
+              />
+            </div>
+
+
+          </div>
+        )}
+
+        {appState.currentStep === 'result' && appState.originalGrid && (
+          <div className="space-y-6">
+            {/* 修正中のエラーメッセージ */}
+            {isEditing && (
+              <div className="bg-white p-4 rounded-lg border border-black">
+                <h2 className="text-lg font-bold text-gray-800 mb-2">
+                  ✏️ 修正中...
+                </h2>
+                <p className="text-gray-700 text-sm">
+                  数字を修正中です。完了後に結果を確認できます。
+                </p>
+              </div>
+            )}
+
+            {/* 結果表示（修正中は非表示） */}
+            {!isEditing && (
+              <ResultDisplay
+                originalGrid={appState.originalGrid}
+                solvedGrid={appState.solvedGrid ?? undefined}
+                validationResult={appState.validationResult ?? undefined}
+                regions={appState.regions ?? undefined}
+              />
+            )}
+
+            {/* 編集ボタン */}
+            <div className="flex flex-col space-y-3">
+              {!isEditing ? (
+                <button
+                  onClick={handleStartEdit}
+                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  ✏️ 数字を修正する
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleFinishEdit}
+                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+
+                  >
+                    ✅ 修正完了
                   </button>
                   <button
                     onClick={handleCancelEdit}
@@ -575,12 +556,6 @@ function App() {
                 onCellEdit={handleCellEdit}
               />
             </div>
-
-
-
-
-
-
           </div>
         )}
       </main>
