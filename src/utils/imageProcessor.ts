@@ -690,10 +690,11 @@ export class ImageProcessor {
       // セル画像を前処理
       const processedCell = await this.preprocessCellImage(cellImageData);
       
-      // 小さい数字を事前フィルタリング
+      // 事前フィルタリングを緩和（より多くの候補をOCRに送る）
       const hasLargeNumber = await this.hasSignificantNumber(processedCell);
       if (!hasLargeNumber) {
-        return null; // 小さい数字や薄い数字は無視
+        console.log('Pre-filtering: No significant number detected, but proceeding with OCR');
+        // フィルタリングで除外されてもOCRを試行する
       }
       
       // OCR実行
@@ -702,24 +703,33 @@ export class ImageProcessor {
       // 数字のみを抽出
       const numbers = data.text.replace(/[^1-9]/g, '');
       
-      // より厳しい条件で数字を認識
-      if (numbers.length === 1 && data.confidence > 70) { // 信頼度閾値を70に上げる
+      // より寛容な条件で数字を認識（精度向上のため）
+      if (numbers.length === 1 && data.confidence > 25) { // 信頼度閾値を25に下げる
         const recognizedNumber = parseInt(numbers[0]);
         
         // 追加の検証：数字の大きさとコントラストをチェック
         const isValidNumber = await this.validateNumberSize(processedCell, recognizedNumber);
         if (isValidNumber) {
+          console.log(`Recognized number ${recognizedNumber} with confidence ${data.confidence.toFixed(1)}%`);
           return recognizedNumber;
         }
       }
       
       // 複数の数字が認識された場合、最も信頼できる数字を選択
-      if (numbers.length > 1 && data.confidence > 80) {
+      if (numbers.length > 1 && data.confidence > 30) { // 複数数字の場合も閾値を下げる
         const recognizedNumber = parseInt(numbers[0]);
         const isValidNumber = await this.validateNumberSize(processedCell, recognizedNumber);
         if (isValidNumber) {
+          console.log(`Recognized number ${recognizedNumber} (from multiple) with confidence ${data.confidence.toFixed(1)}%`);
           return recognizedNumber;
         }
+      }
+      
+      // 信頼度が低くても数字が1つだけ認識された場合は採用を検討
+      if (numbers.length === 1 && data.confidence > 10) { // 最低限の閾値を10に下げる
+        const recognizedNumber = parseInt(numbers[0]);
+        console.log(`Very low confidence number ${recognizedNumber} detected (${data.confidence.toFixed(1)}%), skipping validation`);
+        return recognizedNumber;
       }
       
       return null;
