@@ -151,9 +151,12 @@ export class ImageProcessor {
   static async loadJigsawSudokuFromJson(): Promise<{ grid: SudokuGrid; regions: Regions }> {
     try {
       const response = await fetch('/NamPure/sample.json');
-      const jigsawData: JigsawSudokuData = await response.json();
       
-      console.log('Loaded jigsaw sudoku data:', jigsawData);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const jigsawData: JigsawSudokuData = await response.json();
       
       return {
         grid: jigsawData.cells,

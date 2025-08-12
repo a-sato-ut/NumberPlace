@@ -3,6 +3,8 @@ import { SudokuGrid, Regions } from '../types/sudoku';
 export class SudokuSolver {
   private grid: SudokuGrid;
   private regions: Regions;
+  private iterations: number = 0;
+  private maxIterations: number = 1000000; // 100万回で停止
 
   constructor(grid: SudokuGrid, regions?: Regions) {
     this.grid = grid.map(row => [...row]);
@@ -10,6 +12,9 @@ export class SudokuSolver {
   }
 
   solve(): SudokuGrid | null {
+    // 反復回数をリセット
+    this.iterations = 0;
+    
     if (this.solveSudoku()) {
       return this.grid;
     }
@@ -17,6 +22,12 @@ export class SudokuSolver {
   }
 
   private solveSudoku(): boolean {
+    this.iterations++;
+    if (this.iterations > this.maxIterations) {
+      console.warn('Sudoku solver reached maximum iterations limit:', this.maxIterations);
+      return false;
+    }
+
     for (let row = 0; row < 9; row++) {
       for (let col = 0; col < 9; col++) {
         if (this.grid[row][col] === null) {

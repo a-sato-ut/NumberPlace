@@ -1,11 +1,12 @@
 import React from 'react';
-import { SudokuGrid as SudokuGridType, SudokuValidationResult } from '../types/sudoku';
+import { SudokuGrid as SudokuGridType, SudokuValidationResult, Regions } from '../types/sudoku';
 import { SudokuValidator } from '../utils/sudokuValidator';
 
 interface ResultDisplayProps {
   originalGrid: SudokuGridType;
   solvedGrid: SudokuGridType;
   validationResult: SudokuValidationResult;
+  regions?: Regions;
   onStartOver: () => void;
 }
 
@@ -13,9 +14,10 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
   originalGrid,
   solvedGrid,
   validationResult,
+  regions,
   onStartOver
 }) => {
-  const comparisonResult = SudokuValidator.compareGrids(originalGrid, solvedGrid);
+  const comparisonResult = SudokuValidator.compareGrids(originalGrid, solvedGrid, regions);
   const isComplete = SudokuValidator.isComplete(originalGrid);
 
   const getStatusInfo = () => {

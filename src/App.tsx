@@ -5,7 +5,51 @@ import { ResultDisplay } from './components/ResultDisplay';
 import { ImageProcessor } from './utils/imageProcessor';
 import { SudokuSolver } from './utils/sudokuSolver';
 import { SudokuValidator } from './utils/sudokuValidator';
-import { AppState, SudokuGrid as SudokuGridType } from './types/sudoku';
+import { AppState, SudokuGrid as SudokuGridType, Regions } from './types/sudoku';
+
+// 初期グリッドのバリデーション関数
+const validateInitialGrid = (grid: SudokuGridType, regions: Regions | null): string[] => {
+  const errors: string[] = [];
+  
+  // 各セルをチェック
+  for (let row = 0; row < 9; row++) {
+    for (let col = 0; col < 9; col++) {
+      const value = grid[row][col];
+      if (value !== null) {
+        // 行の重複チェック
+        for (let i = 0; i < 9; i++) {
+          if (i !== col && grid[row][i] === value) {
+            errors.push(`位置(${row+1}, ${col+1})の数字${value}が行で重複しています`);
+            break;
+          }
+        }
+        
+        // 列の重複チェック
+        for (let i = 0; i < 9; i++) {
+          if (i !== row && grid[i][col] === value) {
+            errors.push(`位置(${row+1}, ${col+1})の数字${value}が列で重複しています`);
+            break;
+          }
+        }
+        
+        // ジグソー領域の重複チェック
+        if (regions) {
+          const region = regions.find(r => r.some(([r, c]: [number, number]) => r === row && c === col));
+          if (region) {
+            for (const [r, c] of region) {
+              if ((r !== row || c !== col) && grid[r][c] === value) {
+                errors.push(`位置(${row+1}, ${col+1})の数字${value}がジグソー領域で重複しています`);
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return errors;
+};
 
 function App() {
   const [appState, setAppState] = useState<AppState>({
@@ -44,6 +88,13 @@ function App() {
         console.log('Processed image:', _file.name, 'with confidence:', ocrResult.confidence, '%, grid:', originalGrid);
       }
       
+      // 初期グリッドの有効性をチェック
+      const validationErrors = validateInitialGrid(originalGrid, regions || null);
+      if (validationErrors.length > 0) {
+        console.error('Initial grid validation errors:', validationErrors);
+        throw new Error(`ナンプレのルールに違反している箇所があります。\n${validationErrors.join('\n')}`);
+      }
+
       // ナンプレを解く
       const solver = new SudokuSolver(originalGrid, regions);
       const solvedGrid = solver.solve();
@@ -52,8 +103,8 @@ function App() {
         throw new Error('この ナンプレは解けませんでした');
       }
 
-      // 元のグリッドと解答を比較・検証
-      const validationResult = SudokuValidator.validate(originalGrid, originalGrid, regions);
+      // 解答の検証
+      const validationResult = SudokuValidator.validate(originalGrid, solvedGrid, regions);
 
       setAppState({
         originalGrid,
@@ -87,7 +138,7 @@ function App() {
 
   const handleDemoSolved = useCallback(() => {
     if (appState.solvedGrid) {
-      const validationResult = SudokuValidator.validate(appState.solvedGrid, appState.solvedGrid, appState.regions || undefined);
+      const validationResult = SudokuValidator.validate(appState.solvedGrid, appState.solvedGrid, appState.regions ?? undefined);
       setAppState(prev => ({
         ...prev,
         originalGrid: prev.solvedGrid,
@@ -196,6 +247,7 @@ function App() {
               originalGrid={appState.originalGrid}
               solvedGrid={appState.solvedGrid!}
               validationResult={appState.validationResult}
+              regions={appState.regions ?? undefined}
               onStartOver={handleStartOver}
             />
 
