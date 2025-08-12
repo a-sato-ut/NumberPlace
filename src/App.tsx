@@ -61,6 +61,10 @@ function App() {
     validationErrors: undefined
   });
 
+  // 編集可能なグリッドの状態管理
+  const [editableGrid, setEditableGrid] = useState<SudokuGridType | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+
   const handleImageUpload = useCallback(async (_file: File) => {
     setAppState(prev => ({
       ...prev,
@@ -181,6 +185,100 @@ function App() {
     }
   }, [appState.solvedGrid, appState.regions]);
 
+  // グリッド編集開始
+  const handleStartEdit = useCallback(() => {
+    if (appState.originalGrid) {
+      setEditableGrid(appState.originalGrid.map(row => [...row])); // ディープコピー
+      setIsEditing(true);
+    }
+  }, [appState.originalGrid]);
+
+  // セル値の変更
+  const handleCellEdit = useCallback((row: number, col: number, value: number | null) => {
+    if (!editableGrid) return;
+    
+    const newGrid = editableGrid.map(r => [...r]);
+    newGrid[row][col] = value;
+    setEditableGrid(newGrid);
+
+    // 変更後即座に検証
+    const validationErrors = validateInitialGrid(newGrid, appState.regions);
+    const validationResult = SudokuValidator.validate(newGrid, newGrid, appState.regions ?? undefined);
+    
+    // アプリ状態を更新
+    setAppState(prev => ({
+      ...prev,
+      originalGrid: newGrid,
+      validationResult,
+      validationErrors: validationErrors.length > 0 ? validationErrors : undefined,
+      currentStep: validationErrors.length > 0 ? 'invalid' : prev.currentStep
+    }));
+
+    console.log(`セル (${row + 1}, ${col + 1}) を ${value} に変更`);
+    console.log('検証エラー:', validationErrors);
+  }, [editableGrid, appState.regions]);
+
+  // 編集完了（解答を試行）
+  const handleFinishEdit = useCallback(() => {
+    if (!editableGrid) return;
+
+    const validationErrors = validateInitialGrid(editableGrid, appState.regions);
+    if (validationErrors.length > 0) {
+      console.log('解答できません - 検証エラーがあります:', validationErrors);
+      return;
+    }
+
+    // ナンプレを解く
+    try {
+      if (!appState.regions) {
+        console.error('領域情報がありません');
+        return;
+      }
+      const solver = new SudokuSolver(editableGrid, appState.regions);
+      const solvedGrid = solver.solve();
+      
+      if (solvedGrid) {
+        const validationResult = SudokuValidator.validate(editableGrid, solvedGrid, appState.regions ?? undefined);
+        setAppState(prev => ({
+          ...prev,
+          originalGrid: editableGrid,
+          solvedGrid,
+          validationResult,
+          currentStep: 'result',
+          validationErrors: undefined
+        }));
+        setIsEditing(false);
+        console.log('解答完了');
+      } else {
+        setAppState(prev => ({
+          ...prev,
+          originalGrid: editableGrid,
+          solvedGrid: null,
+          currentStep: 'unsolvable',
+          solverError: 'このナンプレは解けませんでした。入力された数字を確認してください。'
+        }));
+        console.log('解答できませんでした');
+      }
+    } catch (error) {
+      console.error('解答中にエラーが発生:', error);
+    }
+  }, [editableGrid, appState.regions]);
+
+  // 編集キャンセル
+  const handleCancelEdit = useCallback(() => {
+    setEditableGrid(null);
+    setIsEditing(false);
+    // 元の状態に戻す
+    if (appState.originalGrid) {
+      const validationErrors = validateInitialGrid(appState.originalGrid, appState.regions);
+      setAppState(prev => ({
+        ...prev,
+        validationErrors: validationErrors.length > 0 ? validationErrors : undefined,
+        currentStep: validationErrors.length > 0 ? 'invalid' : prev.currentStep
+      }));
+    }
+  }, [appState.originalGrid, appState.regions]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
@@ -265,13 +363,16 @@ function App() {
             {/* ナンプレグリッド表示 */}
             <div className="bg-white rounded-lg p-4 border border-red-200">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
-                読み取った数字
+                {isEditing ? '数字を修正中...' : '読み取った数字'}
               </h2>
               <SudokuGrid 
-                originalGrid={appState.originalGrid}
+                originalGrid={editableGrid || appState.originalGrid}
                 regions={appState.regions || undefined}
                 showComparison={false}
                 showOriginalOnly={true}
+                editable={isEditing}
+                onCellEdit={handleCellEdit}
+                validationResult={appState.validationResult || undefined}
               />
             </div>
 
@@ -299,12 +400,38 @@ function App() {
 
             {/* アクション */}
             <div className="flex flex-col space-y-3">
-              <button
-                onClick={handleStartOver}
-                className="w-full bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors font-medium"
-              >
-                別の画像をアップロード
-              </button>
+              {!isEditing ? (
+                <>
+                  <button
+                    onClick={handleStartEdit}
+                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    ✏️ 数字を修正する
+                  </button>
+                  <button
+                    onClick={handleStartOver}
+                    className="w-full bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors font-medium"
+                  >
+                    別の画像をアップロード
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleFinishEdit}
+                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                    disabled={appState.validationErrors && appState.validationErrors.length > 0}
+                  >
+                    ✅ 修正完了（解答する）
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                  >
+                    ❌ 修正をキャンセル
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -326,16 +453,19 @@ function App() {
             {/* ナンプレグリッド表示 */}
             <div className="bg-white rounded-lg p-4 border border-orange-200">
               <h2 className="text-lg font-semibold text-gray-900 mb-2 text-center">
-                読み取り結果（解けませんでした）
+                {isEditing ? '数字を修正中...' : '読み取り結果（解けませんでした）'}
               </h2>
               <p className="text-sm text-gray-600 text-center mb-4">
                 以下の数字認識結果をご確認ください。誤認識や欠落がある可能性があります。
               </p>
               <SudokuGrid 
-                originalGrid={appState.originalGrid}
+                originalGrid={editableGrid || appState.originalGrid}
                 regions={appState.regions || undefined}
                 showComparison={false}
                 showOriginalOnly={true}
+                editable={isEditing}
+                onCellEdit={handleCellEdit}
+                validationResult={appState.validationResult || undefined}
               />
             </div>
 
@@ -369,12 +499,38 @@ function App() {
 
             {/* アクション */}
             <div className="flex flex-col space-y-3">
-              <button
-                onClick={handleStartOver}
-                className="w-full bg-orange-600 text-white py-3 px-4 rounded-lg hover:bg-orange-700 transition-colors font-medium"
-              >
-                別の画像をアップロード
-              </button>
+              {!isEditing ? (
+                <>
+                  <button
+                    onClick={handleStartEdit}
+                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    ✏️ 数字を修正する
+                  </button>
+                  <button
+                    onClick={handleStartOver}
+                    className="w-full bg-orange-600 text-white py-3 px-4 rounded-lg hover:bg-orange-700 transition-colors font-medium"
+                  >
+                    別の画像をアップロード
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleFinishEdit}
+                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                    disabled={appState.validationErrors && appState.validationErrors.length > 0}
+                  >
+                    ✅ 修正完了（解答する）
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                  >
+                    ❌ 修正をキャンセル
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}

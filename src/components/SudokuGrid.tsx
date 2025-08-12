@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SudokuGrid as SudokuGridType, SudokuValidationResult, Regions } from '../types/sudoku';
 
 interface SudokuGridProps {
@@ -8,6 +8,8 @@ interface SudokuGridProps {
   validationResult?: SudokuValidationResult;
   showComparison?: boolean;
   showOriginalOnly?: boolean;
+  editable?: boolean;
+  onCellEdit?: (row: number, col: number, value: number | null) => void;
 }
 
 export const SudokuGrid: React.FC<SudokuGridProps> = ({ 
@@ -16,8 +18,11 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
   regions,
   validationResult,
   showComparison = false,
-  showOriginalOnly = false
+  showOriginalOnly = false,
+  editable = false,
+  onCellEdit
 }) => {
+  const [selectedCell, setSelectedCell] = useState<{row: number, col: number} | null>(null);
   const gridToShow = showOriginalOnly ? originalGrid : (solvedGrid || originalGrid);
 
   if (!gridToShow) {
@@ -50,8 +55,29 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
     return colors[regionId % colors.length];
   };
 
+  const handleCellClick = (row: number, col: number) => {
+    if (!editable) return;
+    setSelectedCell({row, col});
+  };
+
+  const handleNumberInput = (number: number | null) => {
+    if (!selectedCell || !onCellEdit) return;
+    onCellEdit(selectedCell.row, selectedCell.col, number);
+    setSelectedCell(null);
+  };
+
   const getCellClassName = (row: number, col: number): string => {
     let baseClasses = "aspect-square flex items-center justify-center text-lg font-semibold ";
+    
+    // 編集可能な場合はクリック可能にする
+    if (editable) {
+      baseClasses += "cursor-pointer hover:bg-blue-50 ";
+    }
+    
+    // 選択されたセルのハイライト
+    if (selectedCell && selectedCell.row === row && selectedCell.col === col) {
+      baseClasses += "ring-2 ring-blue-500 ";
+    }
     
     // 現在のセルのregionId
     const currentRegionId = getRegionId(row, col);
@@ -135,6 +161,7 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
               key={`${rowIndex}-${colIndex}`}
               className={getCellClassName(rowIndex, colIndex)}
               title={regions ? `領域 ${getRegionId(rowIndex, colIndex) + 1}` : ''}
+              onClick={() => handleCellClick(rowIndex, colIndex)}
             >
               {showComparison && originalGrid && solvedGrid ? (
                 // 比較表示時：読み取り結果はnullを空白、正解表示は数字を表示
@@ -171,6 +198,42 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
               </li>
             )}
           </ul>
+        </div>
+      )}
+      
+      {/* 数字入力ダイアログ */}
+      {selectedCell && editable && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm mx-4">
+            <h3 className="text-lg font-semibold mb-4 text-center">
+              数字を選択 (行{selectedCell.row + 1}, 列{selectedCell.col + 1})
+            </h3>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                <button
+                  key={num}
+                  onClick={() => handleNumberInput(num)}
+                  className="w-12 h-12 bg-blue-500 text-white text-lg font-semibold rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleNumberInput(null)}
+                className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                空にする
+              </button>
+              <button
+                onClick={() => setSelectedCell(null)}
+                className="flex-1 bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
