@@ -6,9 +6,9 @@ export class SudokuSolver {
   private iterations: number = 0;
   private maxIterations: number = 1000000; // 100万回で停止
 
-  constructor(grid: SudokuGrid, regions?: Regions) {
+  constructor(grid: SudokuGrid, regions: Regions) {
     this.grid = grid.map(row => [...row]);
-    this.regions = regions || this.createStandardRegions();
+    this.regions = regions;
   }
 
   solve(): SudokuGrid | null {
@@ -91,7 +91,10 @@ export class SudokuSolver {
   }
 
   static isGridValid(grid: SudokuGrid, regions?: Regions): boolean {
-    const regionData = regions || new SudokuSolver(grid).createStandardRegions();
+    if (!regions) {
+      throw new Error('領域情報が必要です。通常のナンプレの場合は標準3x3領域を事前に作成してください。');
+    }
+    const regionData = regions;
     
     for (let row = 0; row < 9; row++) {
       for (let col = 0; col < 9; col++) {
@@ -135,21 +138,5 @@ export class SudokuSolver {
     return null;
   }
 
-  private createStandardRegions(): Regions {
-    const regions: Regions = [];
-    
-    for (let blockRow = 0; blockRow < 3; blockRow++) {
-      for (let blockCol = 0; blockCol < 3; blockCol++) {
-        const region = [];
-        for (let row = blockRow * 3; row < (blockRow + 1) * 3; row++) {
-          for (let col = blockCol * 3; col < (blockCol + 1) * 3; col++) {
-            region.push([row, col] as [number, number]);
-          }
-        }
-        regions.push(region);
-      }
-    }
-    
-    return regions;
-  }
+  // 標準領域作成機能はImageProcessorに統一
 }

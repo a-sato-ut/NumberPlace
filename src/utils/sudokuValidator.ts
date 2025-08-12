@@ -60,7 +60,7 @@ export class SudokuValidator {
       }
     }
 
-    // ジグソー領域の重複チェック
+    // 領域の重複チェック（ジグソーナンプレ統一方式）
     if (regions) {
       const region = this.findRegionContaining(row, col, regions);
       if (region) {
@@ -69,25 +69,9 @@ export class SudokuValidator {
             errors.push({
               row,
               col,
-              message: `ジグソー領域内に同じ数字${value}があります`
+              message: `領域内に同じ数字${value}があります`
             });
             return errors; // 領域内の重複は1つ見つかれば十分
-          }
-        }
-      }
-    } else {
-      // 標準の3x3ボックスチェック
-      const boxRow = Math.floor(row / 3) * 3;
-      const boxCol = Math.floor(col / 3) * 3;
-      for (let i = boxRow; i < boxRow + 3; i++) {
-        for (let j = boxCol; j < boxCol + 3; j++) {
-          if ((i !== row || j !== col) && grid[i][j] === value) {
-            errors.push({
-              row,
-              col,
-              message: `3×3ボックス内に同じ数字${value}があります`
-            });
-            return errors; // ボックス内の重複は1つ見つかれば十分
           }
         }
       }

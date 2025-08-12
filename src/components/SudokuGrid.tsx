@@ -29,7 +29,7 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
   }
 
   const getRegionId = (row: number, col: number): number => {
-    if (!regions) return Math.floor(row / 3) * 3 + Math.floor(col / 3);
+    if (!regions) return 0; // 領域が定義されていない場合はデフォルト領域
     
     for (let regionIndex = 0; regionIndex < regions.length; regionIndex++) {
       const region = regions[regionIndex];

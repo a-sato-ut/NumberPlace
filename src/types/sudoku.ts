@@ -24,10 +24,18 @@ export interface SudokuValidationResult {
   }[];
 }
 
+export interface OCRProcessingStep {
+  name: string;
+  description: string;
+  imageData: string; // base64 encoded image
+  data?: any; // 追加のデータ（検出された境界線など）
+}
+
 export interface OCRResult {
   grid: SudokuGrid;
   regions?: Regions;
   confidence: number;
+  processingSteps?: OCRProcessingStep[];
 }
 
 export interface AppState {
@@ -36,5 +44,8 @@ export interface AppState {
   regions: Regions | null;
   validationResult: SudokuValidationResult | null;
   isLoading: boolean;
-  currentStep: 'upload' | 'processing' | 'result';
+  currentStep: 'upload' | 'processing' | 'result' | 'invalid' | 'unsolvable';
+  validationErrors?: string[];
+  processingSteps?: OCRProcessingStep[];
+  solverError?: string;
 }

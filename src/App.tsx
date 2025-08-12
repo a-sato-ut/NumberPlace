@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { ImageUploader } from './components/ImageUploader';
 import { SudokuGrid } from './components/SudokuGrid';
 import { ResultDisplay } from './components/ResultDisplay';
+import { ProcessingSteps } from './components/ProcessingSteps';
 import { ImageProcessor } from './utils/imageProcessor';
 import { SudokuSolver } from './utils/sudokuSolver';
 import { SudokuValidator } from './utils/sudokuValidator';
@@ -32,15 +33,13 @@ const validateInitialGrid = (grid: SudokuGridType, regions: Regions | null): str
           }
         }
         
-        // ジグソー領域の重複チェック
-        if (regions) {
-          const region = regions.find(r => r.some(([r, c]: [number, number]) => r === row && c === col));
-          if (region) {
-            for (const [r, c] of region) {
-              if ((r !== row || c !== col) && grid[r][c] === value) {
-                errors.push(`位置(${row+1}, ${col+1})の数字${value}がジグソー領域で重複しています`);
-                break;
-              }
+        // 領域の重複チェック（ジグソーナンプレ統一方式）
+        const region = regions?.find(r => r.some(([r, c]: [number, number]) => r === row && c === col));
+        if (region) {
+          for (const [r, c] of region) {
+            if ((r !== row || c !== col) && grid[r][c] === value) {
+              errors.push(`位置(${row+1}, ${col+1})の数字${value}が領域で重複しています`);
+              break;
             }
           }
         }
@@ -58,7 +57,8 @@ function App() {
     regions: null,
     validationResult: null,
     isLoading: false,
-    currentStep: 'upload'
+    currentStep: 'upload',
+    validationErrors: undefined
   });
 
   const handleImageUpload = useCallback(async (_file: File) => {
@@ -70,21 +70,28 @@ function App() {
 
     try {
       let originalGrid: SudokuGridType;
-      
       let regions = null;
+      let ocrResult: any;
       
       // ファイル名でデモかどうかを判定
       if (_file.name === 'demo') {
         // デモの場合はsample.jsonからジグソーナンプレを読み込み
-        const jigsawData = await ImageProcessor.loadJigsawSudokuFromJson();
-        originalGrid = jigsawData.grid;
-        regions = jigsawData.regions;
+        ocrResult = await ImageProcessor.processImage(_file);
+        originalGrid = ocrResult.grid;
+        regions = ocrResult.regions;
         console.log('Loaded jigsaw sudoku from sample.json (demo mode):', originalGrid, regions);
       } else {
         // 実際のOCR処理（S__9568259.jpgも含む）
-        const ocrResult = await ImageProcessor.processImage(_file);
+        ocrResult = await ImageProcessor.processImage(_file);
         originalGrid = ocrResult.grid;
         regions = ocrResult.regions;
+        
+        // 通常のナンプレの場合は標準3×3領域を自動作成
+        if (!regions) {
+          regions = ImageProcessor.createStandardRegions();
+          console.log('Created standard 3x3 regions for regular sudoku');
+        }
+        
         console.log('Processed image:', _file.name, 'with confidence:', ocrResult.confidence, '%, grid:', originalGrid);
       }
       
@@ -92,7 +99,18 @@ function App() {
       const validationErrors = validateInitialGrid(originalGrid, regions || null);
       if (validationErrors.length > 0) {
         console.error('Initial grid validation errors:', validationErrors);
-        throw new Error(`ナンプレのルールに違反している箇所があります。\n${validationErrors.join('\n')}`);
+        // ルール違反がある場合でも読み取り結果を表示する
+        setAppState({
+          originalGrid,
+          solvedGrid: null,
+          regions: regions || null,
+          validationResult: null,
+          isLoading: false,
+          currentStep: 'invalid',
+          validationErrors,
+          processingSteps: ocrResult.processingSteps || []
+        });
+        return;
       }
 
       // ナンプレを解く
@@ -100,7 +118,19 @@ function App() {
       const solvedGrid = solver.solve();
       
       if (!solvedGrid) {
-        throw new Error('この ナンプレは解けませんでした');
+        // 解けない場合でも読み取り結果と処理ステップは表示する
+        console.log('Sudoku could not be solved, but showing OCR results');
+        setAppState({
+          originalGrid,
+          solvedGrid: null,
+          regions: regions || null,
+          validationResult: null,
+          isLoading: false,
+          currentStep: 'unsolvable',
+          processingSteps: ocrResult.processingSteps || [],
+          solverError: 'このナンプレは解けませんでした。読み取り結果に誤りがある可能性があります。'
+        });
+        return;
       }
 
       // 解答の検証
@@ -112,7 +142,8 @@ function App() {
         regions: regions || null,
         validationResult,
         isLoading: false,
-        currentStep: 'result'
+        currentStep: 'result',
+        processingSteps: ocrResult.processingSteps || []
       });
     } catch (error) {
       console.error('Processing failed:', error);
@@ -125,14 +156,17 @@ function App() {
     }
   }, []);
 
-  const handleStartOver = useCallback(() => {
+  const       handleStartOver = useCallback(() => {
     setAppState({
       originalGrid: null,
       solvedGrid: null,
       regions: null,
       validationResult: null,
       isLoading: false,
-      currentStep: 'upload'
+      currentStep: 'upload',
+      validationErrors: undefined,
+      processingSteps: undefined,
+      solverError: undefined
     });
   }, []);
 
@@ -215,6 +249,136 @@ function App() {
           </div>
         )}
 
+        {appState.currentStep === 'invalid' && appState.originalGrid && appState.validationErrors && (
+          <div className="space-y-6">
+            {/* データソース表示 */}
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <h3 className="text-sm font-medium text-red-800 mb-1">読み取り結果</h3>
+              <p className="text-xs text-red-700">
+                画像から数字を読み取りましたが、ナンプレのルールに違反している箇所があります
+              </p>
+              <p className="text-xs text-red-600 mt-1">
+                空欄数: {appState.originalGrid.flat().filter(cell => cell === null).length}/81
+              </p>
+            </div>
+
+            {/* ナンプレグリッド表示 */}
+            <div className="bg-white rounded-lg p-4 border border-red-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+                読み取った数字
+              </h2>
+              <SudokuGrid 
+                originalGrid={appState.originalGrid}
+                regions={appState.regions || undefined}
+                showComparison={false}
+                showOriginalOnly={true}
+              />
+            </div>
+
+            {/* エラー詳細 */}
+            <div className="bg-white p-4 rounded-lg border border-red-200">
+              <h3 className="text-sm font-medium text-red-800 mb-3">ルール違反の詳細</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {appState.validationErrors.map((error, index) => (
+                  <div key={index} className="text-xs text-red-700 bg-red-50 p-2 rounded">
+                    {error}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                <p className="text-xs text-yellow-800">
+                  💡 <strong>ヒント:</strong> 読み取りエラーの可能性があります。画像の品質を確認するか、手動で正しい数字に修正してからもう一度お試しください。
+                </p>
+              </div>
+            </div>
+
+            {/* 処理ステップの表示 */}
+            {appState.processingSteps && appState.processingSteps.length > 0 && (
+              <ProcessingSteps steps={appState.processingSteps} />
+            )}
+
+            {/* アクション */}
+            <div className="flex flex-col space-y-3">
+              <button
+                onClick={handleStartOver}
+                className="w-full bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors font-medium"
+              >
+                別の画像をアップロード
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 解けないナンプレの場合 */}
+        {appState.currentStep === 'unsolvable' && appState.originalGrid && (
+          <div className="space-y-6">
+            {/* データソース表示 */}
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <h3 className="text-sm font-medium text-orange-800 mb-1">🤔 ナンプレが解けませんでした</h3>
+              <p className="text-xs text-orange-700">
+                {appState.solverError}
+              </p>
+              <p className="text-xs text-orange-600 mt-1">
+                読み取り結果: {appState.originalGrid.flat().filter(cell => cell !== null).length}/81 セル認識済み
+              </p>
+            </div>
+
+            {/* ナンプレグリッド表示 */}
+            <div className="bg-white rounded-lg p-4 border border-orange-200">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2 text-center">
+                読み取り結果（解けませんでした）
+              </h2>
+              <p className="text-sm text-gray-600 text-center mb-4">
+                以下の数字認識結果をご確認ください。誤認識や欠落がある可能性があります。
+              </p>
+              <SudokuGrid 
+                originalGrid={appState.originalGrid}
+                regions={appState.regions || undefined}
+                showComparison={false}
+                showOriginalOnly={true}
+              />
+            </div>
+
+            {/* エラー詳細説明 */}
+            <div className="bg-white rounded-lg p-4 border border-orange-200">
+              <h3 className="text-sm font-medium text-orange-800 mb-2">考えられる原因:</h3>
+              <div className="space-y-2 text-xs text-orange-700">
+                <div className="flex items-start space-x-2">
+                  <span>•</span>
+                  <span>数字の誤認識（8を6と認識、9を6と認識など）</span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <span>•</span>
+                  <span>読み取れなかった数字がある（薄い文字、汚れなど）</span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <span>•</span>
+                  <span>元の問題に複数解がある、または解が存在しない</span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <span>•</span>
+                  <span>画像の向きやトリミングが不適切</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 処理ステップの表示 */}
+            {appState.processingSteps && appState.processingSteps.length > 0 && (
+              <ProcessingSteps steps={appState.processingSteps} />
+            )}
+
+            {/* アクション */}
+            <div className="flex flex-col space-y-3">
+              <button
+                onClick={handleStartOver}
+                className="w-full bg-orange-600 text-white py-3 px-4 rounded-lg hover:bg-orange-700 transition-colors font-medium"
+              >
+                別の画像をアップロード
+              </button>
+            </div>
+          </div>
+        )}
+
         {appState.currentStep === 'result' && appState.originalGrid && appState.validationResult && (
           <div className="space-y-6">
             {/* データソース表示 */}
@@ -251,6 +415,11 @@ function App() {
               regions={appState.regions ?? undefined}
               onStartOver={handleStartOver}
             />
+
+            {/* 処理ステップの表示 */}
+            {appState.processingSteps && appState.processingSteps.length > 0 && (
+              <ProcessingSteps steps={appState.processingSteps} />
+            )}
 
             {/* デモ用：解答を表示するボタン */}
             {appState.solvedGrid && (
