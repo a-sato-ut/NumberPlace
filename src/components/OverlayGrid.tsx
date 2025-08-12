@@ -98,7 +98,7 @@ export const OverlayGrid: React.FC<OverlayGridProps> = ({
               return (
                 <div
                   key={`${row}-${col}`}
-                  className={`relative border border-gray-300 ${editable ? 'cursor-pointer' : ''} ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                  className={`relative ${editable ? 'cursor-pointer' : ''} ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
                   style={{ backgroundColor: regionColor }}
                   onClick={() => handleCellClick(row, col)}
                   title={regions ? `領域 ${regionId + 1}` : ''}

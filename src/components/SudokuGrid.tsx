@@ -93,30 +93,22 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
     const bottomRegionId = row < 8 ? getRegionId(row + 1, col) : currentRegionId;
     const leftRegionId = col > 0 ? getRegionId(row, col - 1) : currentRegionId;
     
-    // 境界線のクラス
+    // 境界線のクラス（太線のみ表示）
     let borderClasses = "";
     if (topRegionId !== currentRegionId) {
       borderClasses += "border-t-2 border-t-gray-800 ";
-    } else {
-      borderClasses += "border-t border-t-gray-400 ";
     }
     
     if (rightRegionId !== currentRegionId) {
       borderClasses += "border-r-2 border-r-gray-800 ";
-    } else {
-      borderClasses += "border-r border-r-gray-400 ";
     }
     
     if (bottomRegionId !== currentRegionId) {
       borderClasses += "border-b-2 border-b-gray-800 ";
-    } else {
-      borderClasses += "border-b border-b-gray-400 ";
     }
     
     if (leftRegionId !== currentRegionId) {
       borderClasses += "border-l-2 border-l-gray-800 ";
-    } else {
-      borderClasses += "border-l border-l-gray-400 ";
     }
     
     baseClasses += borderClasses;

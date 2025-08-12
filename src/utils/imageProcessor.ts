@@ -1214,25 +1214,7 @@ export class ImageProcessor {
           // 領域番号の表示を削除（ユーザーリクエスト）
         });
         
-        // グリッド線を描画
-        ctx.strokeStyle = '#888888';
-        ctx.lineWidth = 1;
-        
-        for (let i = 0; i <= 9; i++) {
-          // 縦線
-          const x = i * cellWidth;
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, canvas.height);
-          ctx.stroke();
-          
-          // 横線
-          const y = i * cellHeight;
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(canvas.width, y);
-          ctx.stroke();
-        }
+
         
         // 統計情報は削除（注釈なし）
         
@@ -1916,25 +1898,20 @@ export class ImageProcessor {
             const displayX = col * (displayCellSize + padding);
             const displayY = row * (displayCellSize + padding);
             
-            // 前処理済み画像を描画
-            const preprocessedImg = new Image();
-            await new Promise<void>((imgResolve) => {
-              preprocessedImg.onload = () => {
-                ctx.drawImage(preprocessedImg, displayX, displayY, displayCellSize, displayCellSize);
-                
-                // セル枠を表示
-                ctx.strokeStyle = '#cccccc';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(displayX, displayY, displayCellSize, displayCellSize);
-                
-                // セル番号を表示
-                ctx.fillStyle = '#666666';
-                ctx.font = '10px Arial';
-                const cellNumber = row * 9 + col + 1;
-                ctx.fillText(cellNumber.toString(), displayX + 2, displayY + 12);
-                
-                imgResolve();
-              };
+                            // 前処理済み画像を描画
+                const preprocessedImg = new Image();
+                await new Promise<void>((imgResolve) => {
+                  preprocessedImg.onload = () => {
+                    ctx.drawImage(preprocessedImg, displayX, displayY, displayCellSize, displayCellSize);
+                    
+                    // セル番号を表示
+                    ctx.fillStyle = '#666666';
+                    ctx.font = '10px Arial';
+                    const cellNumber = row * 9 + col + 1;
+                    ctx.fillText(cellNumber.toString(), displayX + 2, displayY + 12);
+                    
+                    imgResolve();
+                  };
               preprocessedImg.src = preprocessedCellData;
             });
           }
@@ -2107,26 +2084,7 @@ export class ImageProcessor {
           }
         }
         
-        // セルのグリッド線を表示（参考用）
-        ctx.strokeStyle = '#cccccc';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([]);
-        
-        for (let i = 0; i <= 9; i++) {
-          // 縦線
-          const x = i * cellWidth;
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, canvas.height);
-          ctx.stroke();
-          
-          // 横線
-          const y = i * cellHeight;
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(canvas.width, y);
-          ctx.stroke();
-        }
+
         
         // 統計情報の表示を削除（注釈なし）
         
