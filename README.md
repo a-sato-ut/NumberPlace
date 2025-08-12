@@ -23,7 +23,7 @@
 ## 🏗️ プロジェクト構成
 
 ```
-NamPure/
+NumberPlace/
 ├── public/
 │   ├── manifest.json         # PWA設定
 │   └── index.html
@@ -55,8 +55,8 @@ NamPure/
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/[username]/NamPure.git
-cd NamPure
+git clone https://github.com/[username]/NumberPlace.git
+cd NumberPlace
 
 # 依存関係をインストール
 npm install
@@ -99,7 +99,7 @@ GitHub Pagesでの自動デプロイが設定されています：
 
 1. `main`ブランチにプッシュ
 2. GitHub Actionsが自動でビルド＆デプロイ
-3. `https://[username].github.io/NamPure/`でアクセス可能
+3. `https://[username].github.io/NumberPlace/`でアクセス可能
 
 ### トラブルシューティング
 

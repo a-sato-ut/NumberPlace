@@ -216,7 +216,7 @@ function App() {
               <button
                 onClick={async () => {
                   try {
-                    const response = await fetch('/NamPure/S__9568259.jpg');
+                    const response = await fetch('/NumberPlace/S__9568259.jpg');
                     const blob = await response.blob();
                     const file = new File([blob], 'S__9568259.jpg', { type: 'image/jpeg' });
                     handleImageUpload(file);

@@ -10,7 +10,13 @@ export class ImageProcessor {
     this.worker = await createWorker('jpn+eng');
     await this.worker.setParameters({
       tessedit_char_whitelist: '123456789',
-      tessedit_pageseg_mode: 6 as any, // Uniform block of text
+      tessedit_pageseg_mode: 8 as any, // Single character
+      tessedit_ocr_engine_mode: 3 as any, // Default, based on what is available
+      preserve_interword_spaces: '0',
+      tessedit_do_invert: '0',
+      tessedit_create_boxfile: '0',
+      classify_enable_learning: '0',
+      classify_enable_adaptive_matcher: '1'
     });
   }
 
@@ -700,41 +706,81 @@ export class ImageProcessor {
       // OCR実行
       const { data } = await this.worker.recognize(processedCell);
       
-      // 数字のみを抽出
-      const numbers = data.text.replace(/[^1-9]/g, '');
+      // デバッグ情報を出力
+      console.log('[OCR] === OCR Debug Info ===');
+      console.log('[OCR] Original text:', JSON.stringify(data.text));
+      console.log('[OCR] Confidence:', data.confidence);
+      console.log('[OCR] Text length:', data.text.length);
+      console.log('[OCR] All characters:', Array.from(data.text).map(c => ({ char: c, code: c.charCodeAt(0) })));
       
-      // より寛容な条件で数字を認識（精度向上のため）
-      if (numbers.length === 1 && data.confidence > 25) { // 信頼度閾値を25に下げる
-        const recognizedNumber = parseInt(numbers[0]);
-        
-        // 追加の検証：数字の大きさとコントラストをチェック
-        const isValidNumber = await this.validateNumberSize(processedCell, recognizedNumber);
-        if (isValidNumber) {
-          console.log(`Recognized number ${recognizedNumber} with confidence ${data.confidence.toFixed(1)}%`);
-          return recognizedNumber;
-        }
+      // 詳細な文字解析
+      if (data.words && data.words.length > 0) {
+        console.log('[OCR] Words found:', data.words.length);
+        data.words.forEach((word, idx) => {
+          console.log(`[OCR] Word ${idx}:`, {
+            text: word.text,
+            confidence: word.confidence,
+            bbox: word.bbox
+          });
+        });
       }
+      
+      // 数字のみを抽出（より寛容に）
+      const allNumbers = data.text.replace(/[^0-9]/g, ''); // 0も含む
+      const validNumbers = data.text.replace(/[^1-9]/g, ''); // 1-9のみ
+      console.log('[OCR] All numbers (0-9):', allNumbers);
+      console.log('[OCR] Valid numbers (1-9):', validNumbers);
+      
+      const numbers = validNumbers;
+      
+      const Confidence2 = 0;
+      const Confidence3 = 0;
       
       // 複数の数字が認識された場合、最も信頼できる数字を選択
-      if (numbers.length > 1 && data.confidence > 30) { // 複数数字の場合も閾値を下げる
+      if (numbers.length > 1 && data.confidence > Confidence2) {
         const recognizedNumber = parseInt(numbers[0]);
-        const isValidNumber = await this.validateNumberSize(processedCell, recognizedNumber);
-        if (isValidNumber) {
-          console.log(`Recognized number ${recognizedNumber} (from multiple) with confidence ${data.confidence.toFixed(1)}%`);
-          return recognizedNumber;
-        }
-      }
-      
-      // 信頼度が低くても数字が1つだけ認識された場合は採用を検討
-      if (numbers.length === 1 && data.confidence > 10) { // 最低限の閾値を10に下げる
-        const recognizedNumber = parseInt(numbers[0]);
-        console.log(`Very low confidence number ${recognizedNumber} detected (${data.confidence.toFixed(1)}%), skipping validation`);
+        console.log('[OCR] Multi-digit case: Returning', recognizedNumber, 'with confidence', data.confidence);
         return recognizedNumber;
       }
       
+      // 信頼度が低くても数字が1つだけ認識された場合は採用を検討
+      if (numbers.length === 1 && data.confidence > Confidence3) {
+        const recognizedNumber = parseInt(numbers[0]);
+        console.log('[OCR] Single-digit case: Returning', recognizedNumber, 'with confidence', data.confidence);
+        return recognizedNumber;
+      }
+      
+      console.log('[OCR] No valid number found. Numbers:', numbers, 'Confidence:', data.confidence);
+      
+      // 代替認識を試行：異なる前処理で再チャレンジ
+      console.log('[OCR] Trying alternative preprocessing...');
+      const alternativeCell = await this.preprocessCellImageAlternative(cellImageData);
+      const { data: altData } = await this.worker.recognize(alternativeCell);
+      
+      console.log('[OCR] Alternative OCR result:', {
+        text: JSON.stringify(altData.text),
+        confidence: altData.confidence
+      });
+      
+      const altNumbers = altData.text.replace(/[^1-9]/g, '');
+      if (altNumbers.length === 1 && altData.confidence > 0) {
+        const recognizedNumber = parseInt(altNumbers[0]);
+        console.log('[OCR] Alternative method succeeded: Returning', recognizedNumber, 'with confidence', altData.confidence);
+        return recognizedNumber;
+      }
+      
+      // 最後の手段：テンプレートマッチング
+      console.log('[OCR] Trying template matching as last resort...');
+      const templateResult = await this.tryTemplateMatching(cellImageData);
+      if (templateResult !== null) {
+        console.log('[OCR] Template matching succeeded: Returning', templateResult);
+        return templateResult;
+      }
+      
+      console.log('[OCR] All recognition methods failed for this cell');
       return null;
     } catch (error) {
-      console.warn('Failed to recognize number in cell:', error);
+      console.warn('[OCR] Failed to recognize number in cell:', error);
       return null;
     }
   }
@@ -923,6 +969,138 @@ export class ImageProcessor {
       };
       
       img.onerror = () => resolve(false);
+      img.src = cellImageData;
+    });
+  }
+
+  // シンプルなテンプレートマッチング
+  private static async tryTemplateMatching(cellImageData: string): Promise<number | null> {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      const img = new Image();
+      
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // 簡単な特徴量ベースのマッチング
+        const features = this.extractSimpleFeatures(data, canvas.width, canvas.height);
+        
+        // 簡単なパターンマッチング（将来的に拡張可能）
+        
+        // 最も単純なマッチング：縦横比と密度
+        if (features.verticalRatio > 0.6 && features.horizontalRatio < 0.4) {
+          console.log('Template matching suggests: 1');
+          resolve(1);
+          return;
+        }
+        
+        if (features.topHeavy && features.bottomHeavy && features.symmetrical) {
+          console.log('Template matching suggests: 8');
+          resolve(8);
+          return;
+        }
+        
+        if (features.topHeavy && !features.bottomHeavy) {
+          console.log('Template matching suggests: 7 or 9');
+          resolve(7); // より単純な推測
+          return;
+        }
+        
+        console.log('Template matching failed, features:', features);
+        resolve(null);
+      };
+      
+      img.onerror = () => resolve(null);
+      img.src = cellImageData;
+    });
+  }
+
+  // 簡単な特徴量抽出
+  private static extractSimpleFeatures(data: Uint8ClampedArray, width: number, height: number) {
+    let topDensity = 0, bottomDensity = 0, leftDensity = 0, rightDensity = 0;
+    let totalPixels = 0, blackPixels = 0;
+    
+    const midHeight = height / 2;
+    const midWidth = width / 2;
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const gray = data[idx];
+        totalPixels++;
+        
+        if (gray < 128) {
+          blackPixels++;
+          
+          if (y < midHeight) topDensity++;
+          else bottomDensity++;
+          
+          if (x < midWidth) leftDensity++;
+          else rightDensity++;
+        }
+      }
+    }
+    
+    return {
+      verticalRatio: blackPixels > 0 ? Math.max(topDensity, bottomDensity) / blackPixels : 0,
+      horizontalRatio: blackPixels > 0 ? Math.max(leftDensity, rightDensity) / blackPixels : 0,
+      topHeavy: topDensity > bottomDensity * 1.2,
+      bottomHeavy: bottomDensity > topDensity * 1.2,
+      leftHeavy: leftDensity > rightDensity * 1.2,
+      rightHeavy: rightDensity > leftDensity * 1.2,
+      symmetrical: Math.abs(topDensity - bottomDensity) < blackPixels * 0.1,
+      density: blackPixels / totalPixels
+    };
+  }
+
+  // 代替の前処理方法（より単純でコントラストを強化）
+  private static async preprocessCellImageAlternative(cellImageData: string): Promise<string> {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      const img = new Image();
+      
+      img.onload = () => {
+        // より大きなサイズで高解像度処理
+        const targetSize = 128;
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        
+        // 白い背景で初期化
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, targetSize, targetSize);
+        
+        // 画像を中央に配置して描画
+        const margin = targetSize * 0.1;
+        const drawSize = targetSize - 2 * margin;
+        ctx.drawImage(img, margin, margin, drawSize, drawSize);
+        
+        let imageData = ctx.getImageData(0, 0, targetSize, targetSize);
+        const data = imageData.data;
+        
+        // シンプルなグレースケール化と強いコントラスト
+        for (let i = 0; i < data.length; i += 4) {
+          const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+          
+          // 強いコントラスト: より厳しい閾値
+          const binary = gray < 140 ? 0 : 255;
+          
+          data[i] = binary;     // R
+          data[i + 1] = binary; // G
+          data[i + 2] = binary; // B
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+        resolve(canvas.toDataURL());
+      };
+      
+      img.onerror = () => resolve(cellImageData);
       img.src = cellImageData;
     });
   }
@@ -1803,7 +1981,7 @@ export class ImageProcessor {
   // sample.jsonからジグソーナンプレデータを読み込む機能
   static async loadJigsawSudokuFromJson(): Promise<{ grid: SudokuGrid; regions: Regions }> {
     try {
-      const response = await fetch('/NamPure/sample.json');
+      const response = await fetch('/NumberPlace/sample.json');
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1828,7 +2006,7 @@ export class ImageProcessor {
   // 従来のnumbers.jsonも互換性のため残す
   static async loadGridFromJson(): Promise<SudokuGrid> {
     try {
-      const response = await fetch('/NamPure/numbers.json');
+      const response = await fetch('/NumberPlace/numbers.json');
       const jsonData: number[][] = await response.json();
       
       // 0をnullに変換
@@ -2497,10 +2675,10 @@ export class ImageProcessor {
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
               
-              // 数字を半透明の赤色で表示
-              ctx.fillStyle = 'rgba(255, 0, 0, 0.6)'; // 半透明
-              ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; // 半透明の白色輪郭
-              ctx.lineWidth = 3;
+              // 数字を適度な半透明の赤色で表示
+              ctx.fillStyle = 'rgba(255, 0, 0, 0.45)'; // 適度な半透明
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)'; // 適度な白色輪郭
+              ctx.lineWidth = 2;
               
               const textX = cellX + cellWidth / 2;
               const textY = cellY + cellHeight / 2;

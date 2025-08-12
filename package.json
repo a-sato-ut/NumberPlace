@@ -1,9 +1,9 @@
 {
-  "name": "nampure",
+  "name": "numberplace",
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "homepage": "https://[username].github.io/NamPure",
+  "homepage": "https://[username].github.io/NumberPlace",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
