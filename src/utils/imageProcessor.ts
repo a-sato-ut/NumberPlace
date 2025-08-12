@@ -1649,10 +1649,18 @@ export class ImageProcessor {
       
       img.onload = () => {
         // 精密な切り取り座標 (左から10, 上から250) ~ (左から860, 上から1100)
-        const cropLeft = 10;
-        const cropTop = 250;
-        const cropRight = 860;
-        const cropBottom = 1100;
+        const cropLeftRatio = 10 / 870;
+        const cropTopRatio = 250 / 1884;
+        const cropRightRatio = 860 / 870;
+        const cropBottomRatio = 1100 / 1884;
+
+        const Width = img.width;
+        const Height = img.height;
+
+        const cropLeft = Width * cropLeftRatio;
+        const cropTop = Height * cropTopRatio;
+        const cropRight = Width * cropRightRatio;
+        const cropBottom = Height * cropBottomRatio;
         
         // cropWidth = 850px, cropHeight = 850px
         
