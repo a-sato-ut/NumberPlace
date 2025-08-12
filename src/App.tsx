@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react';
 import { ImageUploader } from './components/ImageUploader';
-import { SudokuGrid } from './components/SudokuGrid';
+import { OverlayGrid } from './components/OverlayGrid';
 import { ResultDisplay } from './components/ResultDisplay';
-import { ProcessingSteps } from './components/ProcessingSteps';
 import { ImageProcessor } from './utils/imageProcessor';
 import { SudokuSolver } from './utils/sudokuSolver';
 import { SudokuValidator } from './utils/sudokuValidator';
@@ -64,6 +63,13 @@ function App() {
   // 編集可能なグリッドの状態管理
   const [editableGrid, setEditableGrid] = useState<SudokuGridType | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // 編集前の状態を保存（キャンセル時の復元用）
+  const [preEditState, setPreEditState] = useState<{
+    step: AppState['currentStep'];
+    validationResult: AppState['validationResult'];
+    validationErrors: AppState['validationErrors'];
+  } | null>(null);
 
   const handleImageUpload = useCallback(async (_file: File) => {
     setAppState(prev => ({
@@ -77,27 +83,18 @@ function App() {
       let regions = null;
       let ocrResult: any;
       
-      // ファイル名でデモかどうかを判定
-      if (_file.name === 'demo') {
-        // デモの場合はsample.jsonからジグソーナンプレを読み込み
-        ocrResult = await ImageProcessor.processImage(_file);
-        originalGrid = ocrResult.grid;
-        regions = ocrResult.regions;
-        console.log('Loaded jigsaw sudoku from sample.json (demo mode):', originalGrid, regions);
-      } else {
-        // 実際のOCR処理（S__9568259.jpgも含む）
-        ocrResult = await ImageProcessor.processImage(_file);
-        originalGrid = ocrResult.grid;
-        regions = ocrResult.regions;
-        
-        // 通常のナンプレの場合は標準3×3領域を自動作成
-        if (!regions) {
-          regions = ImageProcessor.createStandardRegions();
-          console.log('Created standard 3x3 regions for regular sudoku');
-        }
-        
-        console.log('Processed image:', _file.name, 'with confidence:', ocrResult.confidence, '%, grid:', originalGrid);
+      // 画像処理を実行
+      ocrResult = await ImageProcessor.processImage(_file);
+      originalGrid = ocrResult.grid;
+      regions = ocrResult.regions;
+      
+      // 通常のナンプレの場合は標準3×3領域を自動作成
+      if (!regions) {
+        regions = ImageProcessor.createStandardRegions();
+        console.log('Created standard 3x3 regions for regular sudoku');
       }
+      
+      console.log('Processed image:', _file.name, 'with confidence:', ocrResult.confidence, '%, grid:', originalGrid);
       
       // 初期グリッドの有効性をチェック
       const validationErrors = validateInitialGrid(originalGrid, regions || null);
@@ -174,26 +171,43 @@ function App() {
     });
   }, []);
 
-  const handleDemoSolved = useCallback(() => {
-    if (appState.solvedGrid) {
-      const validationResult = SudokuValidator.validate(appState.solvedGrid, appState.solvedGrid, appState.regions ?? undefined);
-      setAppState(prev => ({
-        ...prev,
-        originalGrid: prev.solvedGrid,
-        validationResult
-      }));
-    }
-  }, [appState.solvedGrid, appState.regions]);
+
 
   // グリッド編集開始
   const handleStartEdit = useCallback(() => {
-    if (appState.originalGrid) {
-      setEditableGrid(appState.originalGrid.map(row => [...row])); // ディープコピー
-      setIsEditing(true);
+    console.log('Starting edit mode:', {
+      hasOriginalGrid: !!appState.originalGrid,
+      currentStep: appState.currentStep
+    });
+    
+    if (!appState.originalGrid) {
+      console.error('No original grid available for editing');
+      return;
     }
-  }, [appState.originalGrid]);
 
-  // セル値の変更
+    // 編集前の状態を保存
+    setPreEditState({
+      step: appState.currentStep,
+      validationResult: appState.validationResult,
+      validationErrors: appState.validationErrors
+    });
+
+    // 編集可能なグリッドをセット
+    setEditableGrid(appState.originalGrid.map(row => [...row]));
+    setIsEditing(true);
+    
+    // 編集中は'result'状態で表示し、検証結果をクリア
+    setAppState(prev => ({
+      ...prev,
+      currentStep: 'result', // 常にresult状態で編集
+      validationErrors: undefined,
+      validationResult: prev.validationResult // 既存の結果は保持
+    }));
+    
+    console.log('Edit mode started');
+  }, [appState.originalGrid, appState.currentStep, appState.validationResult, appState.validationErrors]);
+
+  // セル値の変更（リアルタイム検証なし）
   const handleCellEdit = useCallback((row: number, col: number, value: number | null) => {
     if (!editableGrid) return;
     
@@ -201,30 +215,34 @@ function App() {
     newGrid[row][col] = value;
     setEditableGrid(newGrid);
 
-    // 変更後即座に検証
-    const validationErrors = validateInitialGrid(newGrid, appState.regions);
-    const validationResult = SudokuValidator.validate(newGrid, newGrid, appState.regions ?? undefined);
-    
-    // アプリ状態を更新
-    setAppState(prev => ({
-      ...prev,
-      originalGrid: newGrid,
-      validationResult,
-      validationErrors: validationErrors.length > 0 ? validationErrors : undefined,
-      currentStep: validationErrors.length > 0 ? 'invalid' : prev.currentStep
-    }));
-
     console.log(`セル (${row + 1}, ${col + 1}) を ${value} に変更`);
-    console.log('検証エラー:', validationErrors);
-  }, [editableGrid, appState.regions]);
+  }, [editableGrid]);
 
   // 編集完了（解答を試行）
   const handleFinishEdit = useCallback(() => {
     if (!editableGrid) return;
 
+    // まず編集内容をアプリ状態に保存
+    setAppState(prev => ({
+      ...prev,
+      originalGrid: editableGrid
+    }));
+
     const validationErrors = validateInitialGrid(editableGrid, appState.regions);
     if (validationErrors.length > 0) {
-      console.log('解答できません - 検証エラーがあります:', validationErrors);
+      console.log('検証エラーがあります:', validationErrors);
+      // 検証エラーがある場合はinvalidページに移動
+      setAppState(prev => ({
+        ...prev,
+        originalGrid: editableGrid,
+        validationErrors,
+        currentStep: 'invalid',
+        validationResult: null,
+        solvedGrid: null
+      }));
+      setIsEditing(false);
+      setEditableGrid(null);
+      setPreEditState(null); // 編集前状態をクリア
       return;
     }
 
@@ -248,6 +266,8 @@ function App() {
           validationErrors: undefined
         }));
         setIsEditing(false);
+        setEditableGrid(null);
+        setPreEditState(null); // 編集前状態をクリア
         console.log('解答完了');
       } else {
         setAppState(prev => ({
@@ -255,29 +275,54 @@ function App() {
           originalGrid: editableGrid,
           solvedGrid: null,
           currentStep: 'unsolvable',
-          solverError: 'このナンプレは解けませんでした。入力された数字を確認してください。'
+          solverError: 'このナンプレは解けませんでした。入力された数字を確認してください。',
+          validationErrors: undefined
         }));
+        setIsEditing(false);
+        setEditableGrid(null);
+        setPreEditState(null); // 編集前状態をクリア
         console.log('解答できませんでした');
       }
     } catch (error) {
       console.error('解答中にエラーが発生:', error);
+      setIsEditing(false);
+      setEditableGrid(null);
+      setPreEditState(null); // 編集前状態をクリア
     }
   }, [editableGrid, appState.regions]);
 
   // 編集キャンセル
   const handleCancelEdit = useCallback(() => {
+    console.log('Canceling edit mode');
+    
+    // 編集状態をクリア
     setEditableGrid(null);
     setIsEditing(false);
-    // 元の状態に戻す
-    if (appState.originalGrid) {
-      const validationErrors = validateInitialGrid(appState.originalGrid, appState.regions);
+    
+    // 編集前の状態を復元
+    if (preEditState) {
       setAppState(prev => ({
         ...prev,
-        validationErrors: validationErrors.length > 0 ? validationErrors : undefined,
-        currentStep: validationErrors.length > 0 ? 'invalid' : prev.currentStep
+        currentStep: preEditState.step,
+        validationResult: preEditState.validationResult,
+        validationErrors: preEditState.validationErrors
       }));
+      setPreEditState(null);
+    } else {
+      // フォールバック: 編集前の状態が不明な場合
+      console.warn('No pre-edit state saved, falling back to validation');
+      if (appState.originalGrid) {
+        const validationErrors = validateInitialGrid(appState.originalGrid, appState.regions);
+        setAppState(prev => ({
+          ...prev,
+          validationErrors: validationErrors.length > 0 ? validationErrors : undefined,
+          currentStep: validationErrors.length > 0 ? 'invalid' : 'result'
+        }));
+      }
     }
-  }, [appState.originalGrid, appState.regions]);
+    
+    console.log('Edit mode canceled');
+  }, [preEditState, appState.originalGrid, appState.regions]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -302,36 +347,7 @@ function App() {
               isLoading={appState.isLoading}
             />
             
-            {/* デモボタン */}
-            <div className="text-center space-y-3">
-              <button
-                onClick={() => handleImageUpload(new File([], 'demo'))}
-                className="block w-full bg-primary-600 text-white py-2 px-4 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-              >
-                🧩 ジグソーナンプレを読み込んで解析
-              </button>
-              
-              <button
-                onClick={async () => {
-                  try {
-                    const response = await fetch('/NumberPlace/S__9568259.jpg');
-                    const blob = await response.blob();
-                    const file = new File([blob], 'S__9568259.jpg', { type: 'image/jpeg' });
-                    handleImageUpload(file);
-                  } catch (error) {
-                    console.error('Failed to load test image:', error);
-                    alert('テスト画像の読み込みに失敗しました');
-                  }
-                }}
-                className="block w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-              >
-                📱 S__9568259.jpg でテスト
-              </button>
-              
-              <p className="text-xs text-gray-500">
-                上: ジグソーナンプレJSONデータ読み込み / 下: 画像ファイル処理
-              </p>
-            </div>
+
           </div>
         )}
 
@@ -349,30 +365,19 @@ function App() {
 
         {appState.currentStep === 'invalid' && appState.originalGrid && appState.validationErrors && (
           <div className="space-y-6">
-            {/* データソース表示 */}
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <h3 className="text-sm font-medium text-red-800 mb-1">読み取り結果</h3>
-              <p className="text-xs text-red-700">
-                画像から数字を読み取りましたが、ナンプレのルールに違反している箇所があります
-              </p>
-              <p className="text-xs text-red-600 mt-1">
-                空欄数: {appState.originalGrid.flat().filter(cell => cell === null).length}/81
-              </p>
-            </div>
 
-            {/* ナンプレグリッド表示 */}
+
+            {/* ナンプレオーバーレイ表示 */}
             <div className="bg-white rounded-lg p-4 border border-red-200">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
                 {isEditing ? '数字を修正中...' : '読み取った数字'}
               </h2>
-              <SudokuGrid 
+              <OverlayGrid 
                 originalGrid={editableGrid || appState.originalGrid}
                 regions={appState.regions || undefined}
-                showComparison={false}
-                showOriginalOnly={true}
+                processingSteps={appState.processingSteps}
                 editable={isEditing}
                 onCellEdit={handleCellEdit}
-                validationResult={appState.validationResult || undefined}
               />
             </div>
 
@@ -393,10 +398,7 @@ function App() {
               </div>
             </div>
 
-            {/* 処理ステップの表示 */}
-            {appState.processingSteps && appState.processingSteps.length > 0 && (
-              <ProcessingSteps steps={appState.processingSteps} />
-            )}
+
 
             {/* アクション */}
             <div className="flex flex-col space-y-3">
@@ -420,7 +422,7 @@ function App() {
                   <button
                     onClick={handleFinishEdit}
                     className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
-                    disabled={appState.validationErrors && appState.validationErrors.length > 0}
+
                   >
                     ✅ 修正完了（解答する）
                   </button>
@@ -439,18 +441,9 @@ function App() {
         {/* 解けないナンプレの場合 */}
         {appState.currentStep === 'unsolvable' && appState.originalGrid && (
           <div className="space-y-6">
-            {/* データソース表示 */}
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-              <h3 className="text-sm font-medium text-orange-800 mb-1">🤔 ナンプレが解けませんでした</h3>
-              <p className="text-xs text-orange-700">
-                {appState.solverError}
-              </p>
-              <p className="text-xs text-orange-600 mt-1">
-                読み取り結果: {appState.originalGrid.flat().filter(cell => cell !== null).length}/81 セル認識済み
-              </p>
-            </div>
 
-            {/* ナンプレグリッド表示 */}
+
+            {/* ナンプレオーバーレイ表示 */}
             <div className="bg-white rounded-lg p-4 border border-orange-200">
               <h2 className="text-lg font-semibold text-gray-900 mb-2 text-center">
                 {isEditing ? '数字を修正中...' : '読み取り結果（解けませんでした）'}
@@ -458,14 +451,12 @@ function App() {
               <p className="text-sm text-gray-600 text-center mb-4">
                 以下の数字認識結果をご確認ください。誤認識や欠落がある可能性があります。
               </p>
-              <SudokuGrid 
+              <OverlayGrid 
                 originalGrid={editableGrid || appState.originalGrid}
                 regions={appState.regions || undefined}
-                showComparison={false}
-                showOriginalOnly={true}
+                processingSteps={appState.processingSteps}
                 editable={isEditing}
                 onCellEdit={handleCellEdit}
-                validationResult={appState.validationResult || undefined}
               />
             </div>
 
@@ -492,10 +483,7 @@ function App() {
               </div>
             </div>
 
-            {/* 処理ステップの表示 */}
-            {appState.processingSteps && appState.processingSteps.length > 0 && (
-              <ProcessingSteps steps={appState.processingSteps} />
-            )}
+
 
             {/* アクション */}
             <div className="flex flex-col space-y-3">
@@ -519,7 +507,7 @@ function App() {
                   <button
                     onClick={handleFinishEdit}
                     className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
-                    disabled={appState.validationErrors && appState.validationErrors.length > 0}
+
                   >
                     ✅ 修正完了（解答する）
                   </button>
@@ -535,71 +523,64 @@ function App() {
           </div>
         )}
 
-        {appState.currentStep === 'result' && appState.originalGrid && appState.validationResult && (
+        {appState.currentStep === 'result' && appState.originalGrid && (
           <div className="space-y-6">
-            {/* データソース表示 */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <h3 className="text-sm font-medium text-blue-800 mb-1">データソース</h3>
-              <p className="text-xs text-blue-700">
-                {appState.originalGrid ? '画像解析完了' : 'numbers.json から読み込み完了'}
-              </p>
-              <p className="text-xs text-blue-600 mt-1">
-                空欄数: {appState.originalGrid.flat().filter(cell => cell === null).length}/81
-              </p>
-            </div>
-
-            {/* ナンプレグリッド表示 */}
-            <div className="bg-white rounded-lg p-4 border">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
-                検出されたナンプレ
-              </h2>
-              <SudokuGrid 
-                originalGrid={appState.originalGrid}
-                solvedGrid={appState.solvedGrid || undefined}
-                regions={appState.regions || undefined}
-                validationResult={appState.validationResult}
-                showComparison={false}
-                showOriginalOnly={true}
-              />
-            </div>
-
-            {/* 結果表示 */}
+            {/* 結果表示を最上部に配置 */}
             <ResultDisplay
               originalGrid={appState.originalGrid}
-              solvedGrid={appState.solvedGrid!}
-              validationResult={appState.validationResult}
+              solvedGrid={appState.solvedGrid ?? undefined}
+              validationResult={appState.validationResult ?? undefined}
               regions={appState.regions ?? undefined}
               onStartOver={handleStartOver}
             />
 
-            {/* 処理ステップの表示 */}
-            {appState.processingSteps && appState.processingSteps.length > 0 && (
-              <ProcessingSteps steps={appState.processingSteps} />
-            )}
-
-            {/* デモ用：解答を表示するボタン */}
-            {appState.solvedGrid && (
-              <div className="bg-white rounded-lg p-4 border border-primary-200">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">解答と比較</h3>
-                <div className="space-y-3">
+            {/* 編集ボタン */}
+            <div className="flex flex-col space-y-3">
+              {!isEditing ? (
+                <button
+                  onClick={handleStartEdit}
+                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  ✏️ 数字を修正する
+                </button>
+              ) : (
+                <>
                   <button
-                    onClick={handleDemoSolved}
-                    className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors text-sm"
+                    onClick={handleFinishEdit}
+                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+
                   >
-                    ✅ 完全解答版で検証
+                    ✅ 修正完了（解答する）
                   </button>
-                  <SudokuGrid 
-                    originalGrid={appState.originalGrid}
-                    solvedGrid={appState.solvedGrid || undefined}
-                    regions={appState.regions || undefined}
-                    showComparison={true}
-                  />
-                  <p className="text-xs text-gray-500">
-                    グレー: 元の数字、青: 解答で追加された数字
-                  </p>
-                </div>
-              </div>
-            )}
+                  <button
+                    onClick={handleCancelEdit}
+                    className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                  >
+                    ❌ 修正をキャンセル
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* ナンプレオーバーレイ表示 */}
+            <div className="bg-white rounded-lg p-4 border">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+                {isEditing ? '数字を修正中...' : '検出されたナンプレ'}
+              </h2>
+              <OverlayGrid 
+                originalGrid={editableGrid || appState.originalGrid}
+                regions={appState.regions || undefined}
+                processingSteps={appState.processingSteps}
+                editable={isEditing}
+                onCellEdit={handleCellEdit}
+              />
+            </div>
+
+
+
+
+
+
           </div>
         )}
       </main>

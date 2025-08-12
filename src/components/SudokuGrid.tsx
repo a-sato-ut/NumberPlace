@@ -56,7 +56,12 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
   };
 
   const handleCellClick = (row: number, col: number) => {
-    if (!editable) return;
+    console.log('Cell clicked:', {row, col, editable});
+    if (!editable) {
+      console.log('Not editable, returning');
+      return;
+    }
+    console.log('Setting selected cell:', {row, col});
     setSelectedCell({row, col});
   };
 

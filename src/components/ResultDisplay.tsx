@@ -4,8 +4,8 @@ import { SudokuValidator } from '../utils/sudokuValidator';
 
 interface ResultDisplayProps {
   originalGrid: SudokuGridType;
-  solvedGrid: SudokuGridType;
-  validationResult: SudokuValidationResult;
+  solvedGrid?: SudokuGridType;
+  validationResult?: SudokuValidationResult;
   regions?: Regions;
   onStartOver: () => void;
 }
@@ -17,10 +17,21 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
   regions,
   onStartOver
 }) => {
-  const comparisonResult = SudokuValidator.compareGrids(originalGrid, solvedGrid, regions);
+  const comparisonResult = solvedGrid ? SudokuValidator.compareGrids(originalGrid, solvedGrid, regions) : 'unknown';
   const isComplete = SudokuValidator.isComplete(originalGrid);
 
   const getStatusInfo = () => {
+    // 編集中の場合（validationResultがundefined）
+    if (!validationResult) {
+      return {
+        title: '✏️ 編集中...',
+        message: '数字を修正中です。完了後に結果を確認できます。',
+        bgColor: 'bg-gray-50',
+        textColor: 'text-gray-800',
+        borderColor: 'border-gray-200'
+      };
+    }
+
     if (comparisonResult === 'correct' && isComplete) {
       return {
         title: '🎉 完璧です！',
@@ -97,7 +108,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
       </div>
 
       {/* エラー詳細（エラーがある場合のみ） */}
-      {validationResult.errors.length > 0 && (
+      {validationResult && validationResult.errors.length > 0 && (
         <div className="bg-white p-4 rounded-lg border border-red-200">
           <h3 className="text-sm font-medium text-red-800 mb-3">エラー詳細</h3>
           <div className="space-y-2 max-h-40 overflow-y-auto">

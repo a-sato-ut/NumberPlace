@@ -23,44 +23,7 @@ export class ImageProcessor {
   static async processImage(imageFile: File): Promise<OCRResult> {
     const processingSteps: OCRProcessingStep[] = [];
 
-    // S__9568259.jpgの場合は、sample.jsonのジグソーデータを使用
-    if (imageFile.name === 'S__9568259.jpg' || imageFile.name.includes('S__9568259')) {
-      console.log('Special handling for S__9568259.jpg - using sample.json jigsaw data');
-      
-      // デモ用の処理ステップを作成
-      const originalImageData = await this.fileToDataURL(imageFile);
-      processingSteps.push({
-        name: 'original',
-        description: '元の画像',
-        imageData: originalImageData
-      });
 
-      // デモ用のナンプレ検出ステップ
-      const detectedGridImage = await this.createDemoDetectionImage(imageFile);
-      processingSteps.push({
-        name: 'grid_detection',
-        description: 'ナンプレ境界の検出',
-        imageData: detectedGridImage,
-        data: { gridBounds: { x: 50, y: 100, width: 400, height: 400 } }
-      });
-
-      // デモ用の太線検出ステップ（改良版）
-      const thickLinesImage = await this.createAdvancedThickLinesImage(imageFile);
-      processingSteps.push({
-        name: 'thick_lines',
-        description: '高精度太線検出（ジグソー領域境界）',
-        imageData: thickLinesImage,
-        data: { thickLinesFound: 8, jigsawRegions: 9 }
-      });
-
-      const jigsawData = await this.loadJigsawSudokuFromJson();
-      return {
-        grid: jigsawData.grid,
-        regions: jigsawData.regions,
-        confidence: 95,
-        processingSteps
-      };
-    }
 
     await this.initializeOCR();
     
@@ -550,41 +513,7 @@ export class ImageProcessor {
     return regions;
   }
 
-  // Sobelフィルタによるエッジ検出
-  private static detectEdges(ctx: CanvasRenderingContext2D, width: number, height: number): ImageData {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    const edges = new Uint8ClampedArray(data.length);
-    
-    // Sobelオペレータ
-    const sobelX = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]];
-    const sobelY = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
-    
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        let gx = 0, gy = 0;
-        
-        for (let ky = -1; ky <= 1; ky++) {
-          for (let kx = -1; kx <= 1; kx++) {
-            const idx = ((y + ky) * width + (x + kx)) * 4;
-            const gray = data[idx]; // R値（グレースケール）
-            
-            gx += gray * sobelX[ky + 1][kx + 1];
-            gy += gray * sobelY[ky + 1][kx + 1];
-          }
-        }
-        
-        const magnitude = Math.sqrt(gx * gx + gy * gy);
-        const edgeValue = magnitude > 30 ? 255 : 0; // 閾値を30に調整（より感度を上げる）
-        
-        const idx = (y * width + x) * 4;
-        edges[idx] = edges[idx + 1] = edges[idx + 2] = edgeValue;
-        edges[idx + 3] = 255;
-      }
-    }
-    
-    return new ImageData(edges, width, height);
-  }
+
 
   // 新しい太線検出アルゴリズム（数字除去 + ピクセルカウント）
   private static detectLinesAdvanced(imageData: ImageData, width: number, height: number): {
@@ -607,78 +536,8 @@ export class ImageProcessor {
     return result;
   }
 
-  // ハフ変換による直線検出（太線と細線を分離）- 旧アルゴリズム
-  private static detectLines(edges: ImageData, width: number, height: number): {
-    allLines: Array<{rho: number, theta: number, strength: number, type: 'thin' | 'thick'}>,
-    thinLines: Array<{rho: number, theta: number, strength: number}>,
-    thickLines: Array<{rho: number, theta: number, strength: number}>
-  } {
-    const data = edges.data;
-    const maxRho = Math.sqrt(width * width + height * height);
-    const rhoResolution = 1;
-    const thetaResolution = Math.PI / 180; // 1度
-    
-    const accumulator = Array.from({length: Math.floor(maxRho * 2 / rhoResolution)}, () => 
-      Array(Math.floor(Math.PI / thetaResolution)).fill(0)
-    );
-    
-    // エッジピクセルに対してハフ変換を実行
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const idx = (y * width + x) * 4;
-        if (data[idx] > 128) { // エッジピクセル
-          for (let thetaIdx = 0; thetaIdx < accumulator[0].length; thetaIdx++) {
-            const theta = thetaIdx * thetaResolution;
-            const rho = x * Math.cos(theta) + y * Math.sin(theta);
-            const rhoIdx = Math.floor((rho + maxRho) / rhoResolution);
-            
-            if (rhoIdx >= 0 && rhoIdx < accumulator.length) {
-              accumulator[rhoIdx][thetaIdx]++;
-            }
-          }
-        }
-      }
-    }
-    
-    // 閾値以上の直線を抽出
-    const allLines: Array<{rho: number, theta: number, strength: number, type: 'thin' | 'thick'}> = [];
-    const baseThreshold = Math.min(width, height) * 0.1;
-    
-    for (let rhoIdx = 0; rhoIdx < accumulator.length; rhoIdx++) {
-      for (let thetaIdx = 0; thetaIdx < accumulator[0].length; thetaIdx++) {
-        const strength = accumulator[rhoIdx][thetaIdx];
-        
-        if (strength > baseThreshold) {
-          const rho = (rhoIdx * rhoResolution) - maxRho;
-          const theta = thetaIdx * thetaResolution;
-          
-          // 太線と細線を強度で分類
-          const thickThreshold = baseThreshold * 2.5; // 太線の閾値
-          const lineType = strength > thickThreshold ? 'thick' : 'thin';
-          
-          allLines.push({
-            rho,
-            theta,
-            strength,
-            type: lineType
-          });
-        }
-      }
-    }
-    
-    // 線の種類で分離
-    const sortedLines = allLines.sort((a, b) => b.strength - a.strength);
-    const thinLines = sortedLines.filter(line => line.type === 'thin').slice(0, 20);
-    const thickLines = sortedLines.filter(line => line.type === 'thick').slice(0, 10);
-    
-    console.log(`Line detection: ${thinLines.length} thin lines, ${thickLines.length} thick lines`);
-    
-    return {
-      allLines: sortedLines,
-      thinLines,
-      thickLines
-    };
-  }
+
+
 
 
 
@@ -1880,49 +1739,7 @@ export class ImageProcessor {
     });
   }
 
-  // デモ用：グリッド検出の可視化
-  private static async createDemoDetectionImage(file: File): Promise<string> {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d')!;
-      const img = new Image();
-      
-      img.onload = () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        // 元の画像を描画
-        ctx.drawImage(img, 0, 0);
-        
-        // ナンプレ境界を赤い枠で描画
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(50, 100, 400, 400);
-        
-        // セルの境界線を青で描画
-        ctx.strokeStyle = '#0066ff';
-        ctx.lineWidth = 1;
-        for (let i = 1; i < 9; i++) {
-          const x = 50 + (400 / 9) * i;
-          const y = 100 + (400 / 9) * i;
-          // 縦線
-          ctx.beginPath();
-          ctx.moveTo(x, 100);
-          ctx.lineTo(x, 500);
-          ctx.stroke();
-          // 横線
-          ctx.beginPath();
-          ctx.moveTo(50, y);
-          ctx.lineTo(450, y);
-          ctx.stroke();
-        }
-        
-        resolve(canvas.toDataURL());
-      };
-      
-      img.src = URL.createObjectURL(file);
-    });
-  }
+
 
 
 
@@ -2201,159 +2018,10 @@ export class ImageProcessor {
 
 
 
-  // 改良版：高精度太線検出の可視化
-  private static async createAdvancedThickLinesImage(file: File): Promise<string> {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d')!;
-      const img = new Image();
-      
-      img.onload = async () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        // 元の画像を描画
-        ctx.drawImage(img, 0, 0);
-        
-        // 実際の太線検出アルゴリズムを適用
-        const edges = this.detectEdges(ctx, canvas.width, canvas.height);
-        const lineDetection = this.detectLines(edges, canvas.width, canvas.height);
-        
-        // エッジを薄く重ねる
-        const edgeCanvas = document.createElement('canvas');
-        const edgeCtx = edgeCanvas.getContext('2d')!;
-        edgeCanvas.width = canvas.width;
-        edgeCanvas.height = canvas.height;
-        edgeCtx.putImageData(edges, 0, 0);
-        
-        ctx.globalAlpha = 0.2;
-        ctx.drawImage(edgeCanvas, 0, 0);
-        ctx.globalAlpha = 1.0;
-        
-        // 細線を薄い緑で表示
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
-        ctx.lineWidth = 1;
-        
-        lineDetection.thinLines.forEach(line => {
-          const { rho, theta } = line;
-          const cos = Math.cos(theta);
-          const sin = Math.sin(theta);
-          
-          const x0 = cos * rho;
-          const y0 = sin * rho;
-          const x1 = x0 + 1000 * (-sin);
-          const y1 = y0 + 1000 * cos;
-          const x2 = x0 - 1000 * (-sin);
-          const y2 = y0 - 1000 * cos;
-          
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
-        });
-        
-        // 太線を強調して表示
-        ctx.strokeStyle = '#ff6600';
-        ctx.lineWidth = 4;
-        ctx.shadowColor = '#ff6600';
-        ctx.shadowBlur = 2;
-        
-        lineDetection.thickLines.forEach(line => {
-          const { rho, theta } = line;
-          const cos = Math.cos(theta);
-          const sin = Math.sin(theta);
-          
-          const x0 = cos * rho;
-          const y0 = sin * rho;
-          const x1 = x0 + 1000 * (-sin);
-          const y1 = y0 + 1000 * cos;
-          const x2 = x0 - 1000 * (-sin);
-          const y2 = y0 - 1000 * cos;
-          
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
-        });
-        
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        
-        // ジグソー領域を推定して描画
-        const jigsawRegions = this.identifyJigsawRegions(lineDetection.thickLines, canvas.width, canvas.height);
-        this.drawJigsawRegions(ctx, jigsawRegions);
-        
-        resolve(canvas.toDataURL());
-      };
-      
-      img.src = URL.createObjectURL(file);
-    });
-  }
 
-  // ジグソー領域の推定
-  private static identifyJigsawRegions(thickLines: Array<{rho: number, theta: number, strength: number}>, width: number, height: number): Array<{id: number, bounds: {x: number, y: number, width: number, height: number}}> {
-    // 簡略化された実装：太線から9つの領域を推定
-    const regions: Array<{id: number, bounds: {x: number, y: number, width: number, height: number}}> = [];
-    
-    // デフォルトの3x3グリッドベースの領域
-    const gridSize = Math.min(width, height) * 0.8;
-    const startX = (width - gridSize) / 2;
-    const startY = (height - gridSize) / 2;
-    const cellSize = gridSize / 3;
-    
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 3; col++) {
-        regions.push({
-          id: row * 3 + col,
-          bounds: {
-            x: startX + col * cellSize,
-            y: startY + row * cellSize,
-            width: cellSize,
-            height: cellSize
-          }
-        });
-      }
-    }
-    
-    // 太線の情報から領域を調整（簡易版）
-    if (thickLines.length > 0) {
-      // より複雑な領域形状を推定する処理をここに追加
-      // 現在は基本的な3x3グリッドを返す
-    }
-    
-    return regions;
-  }
 
-  // ジグソー領域の描画
-  private static drawJigsawRegions(ctx: CanvasRenderingContext2D, regions: Array<{id: number, bounds: {x: number, y: number, width: number, height: number}}>): void {
-    const colors = [
-      'rgba(255, 0, 0, 0.1)',    // 赤
-      'rgba(0, 255, 0, 0.1)',    // 緑
-      'rgba(0, 0, 255, 0.1)',    // 青
-      'rgba(255, 255, 0, 0.1)',  // 黄
-      'rgba(255, 0, 255, 0.1)',  // マゼンタ
-      'rgba(0, 255, 255, 0.1)',  // シアン
-      'rgba(255, 128, 0, 0.1)',  // オレンジ
-      'rgba(128, 0, 255, 0.1)',  // 紫
-      'rgba(0, 128, 255, 0.1)'   // 水色
-    ];
-    
-    regions.forEach((region, index) => {
-      ctx.fillStyle = colors[index % colors.length];
-      ctx.fillRect(region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height);
-      
-      // 領域番号を表示
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.font = '16px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(
-        (region.id + 1).toString(),
-        region.bounds.x + region.bounds.width / 2,
-        region.bounds.y + region.bounds.height / 2
-      );
-    });
-  }
+
+
 
 
 
