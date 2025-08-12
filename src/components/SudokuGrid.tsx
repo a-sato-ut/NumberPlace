@@ -7,6 +7,7 @@ interface SudokuGridProps {
   regions?: Regions;
   validationResult?: SudokuValidationResult;
   showComparison?: boolean;
+  showOriginalOnly?: boolean;
 }
 
 export const SudokuGrid: React.FC<SudokuGridProps> = ({ 
@@ -14,9 +15,10 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
   solvedGrid, 
   regions,
   validationResult,
-  showComparison = false 
+  showComparison = false,
+  showOriginalOnly = false
 }) => {
-  const gridToShow = solvedGrid || originalGrid;
+  const gridToShow = showOriginalOnly ? originalGrid : (solvedGrid || originalGrid);
 
   if (!gridToShow) {
     return (
@@ -42,21 +44,54 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
 
   const getRegionColor = (regionId: number): string => {
     const colors = [
-      'bg-red-50', 'bg-blue-50', 'bg-green-50', 'bg-yellow-50', 'bg-purple-50',
-      'bg-pink-50', 'bg-indigo-50', 'bg-gray-50', 'bg-orange-50'
+      'bg-red-100', 'bg-blue-100', 'bg-green-100', 'bg-yellow-100', 'bg-purple-100',
+      'bg-pink-100', 'bg-indigo-100', 'bg-gray-100', 'bg-orange-100'
     ];
     return colors[regionId % colors.length];
   };
 
   const getCellClassName = (row: number, col: number): string => {
-    let baseClasses = "aspect-square flex items-center justify-center text-lg font-semibold border ";
+    let baseClasses = "aspect-square flex items-center justify-center text-lg font-semibold ";
     
-    // 基本の境界線
-    baseClasses += "border border-gray-400 ";
+    // 現在のセルのregionId
+    const currentRegionId = getRegionId(row, col);
+    
+    // 境界線の決定（異なるregion間のみ太線）
+    const topRegionId = row > 0 ? getRegionId(row - 1, col) : currentRegionId;
+    const rightRegionId = col < 8 ? getRegionId(row, col + 1) : currentRegionId;
+    const bottomRegionId = row < 8 ? getRegionId(row + 1, col) : currentRegionId;
+    const leftRegionId = col > 0 ? getRegionId(row, col - 1) : currentRegionId;
+    
+    // 境界線のクラス
+    let borderClasses = "";
+    if (topRegionId !== currentRegionId) {
+      borderClasses += "border-t-2 border-t-gray-800 ";
+    } else {
+      borderClasses += "border-t border-t-gray-400 ";
+    }
+    
+    if (rightRegionId !== currentRegionId) {
+      borderClasses += "border-r-2 border-r-gray-800 ";
+    } else {
+      borderClasses += "border-r border-r-gray-400 ";
+    }
+    
+    if (bottomRegionId !== currentRegionId) {
+      borderClasses += "border-b-2 border-b-gray-800 ";
+    } else {
+      borderClasses += "border-b border-b-gray-400 ";
+    }
+    
+    if (leftRegionId !== currentRegionId) {
+      borderClasses += "border-l-2 border-l-gray-800 ";
+    } else {
+      borderClasses += "border-l border-l-gray-400 ";
+    }
+    
+    baseClasses += borderClasses;
 
     // ジグソー領域の背景色
-    const regionId = getRegionId(row, col);
-    const regionColor = getRegionColor(regionId);
+    const regionColor = getRegionColor(currentRegionId);
     
     // セルの背景色
     if (showComparison && originalGrid && solvedGrid) {
@@ -65,10 +100,10 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
       
       if (originalValue !== null) {
         // 元々入っていた数字
-        baseClasses += `${regionColor} text-gray-800 border-2 border-gray-600 `;
+        baseClasses += `${regionColor} text-gray-800 `;
       } else if (solvedValue !== null) {
         // 解答で追加された数字
-        baseClasses += `${regionColor} text-primary-800 border-primary-400 `;
+        baseClasses += `${regionColor} text-primary-800 `;
       } else {
         // 空のセル
         baseClasses += `${regionColor} `;
@@ -101,7 +136,15 @@ export const SudokuGrid: React.FC<SudokuGridProps> = ({
               className={getCellClassName(rowIndex, colIndex)}
               title={regions ? `領域 ${getRegionId(rowIndex, colIndex) + 1}` : ''}
             >
-              {cell || ''}
+              {showComparison && originalGrid && solvedGrid ? (
+                // 比較表示時：読み取り結果はnullを空白、正解表示は数字を表示
+                originalGrid[rowIndex][colIndex] !== null 
+                  ? originalGrid[rowIndex][colIndex] // 読み取り結果の数字
+                  : (solvedGrid[rowIndex][colIndex] || '') // 正解の数字（nullなら空白）
+              ) : (
+                // 通常表示時：nullは空白
+                cell || ''
+              )}
             </div>
           ))
         )}

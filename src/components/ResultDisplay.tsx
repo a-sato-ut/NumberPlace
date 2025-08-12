@@ -59,7 +59,10 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
         }
       }
     }
-    return Math.round((filledCells / 81) * 100);
+    return {
+      filledCells,
+      percentage: Math.round((filledCells / 81) * 100)
+    };
   };
 
   const progress = getProgress();
@@ -80,16 +83,16 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({
       <div className="bg-white p-4 rounded-lg border border-gray-200">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm font-medium text-gray-700">進捗</span>
-          <span className="text-sm text-gray-500">{progress}%</span>
+          <span className="text-sm text-gray-500">{progress.percentage}%</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div 
             className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${progress}%` }}
+            style={{ width: `${progress.percentage}%` }}
           ></div>
         </div>
         <p className="text-xs text-gray-500 mt-2">
-          {81 - (progress * 81 / 100)} / 81 マス残り
+          {81 - progress.filledCells} / 81 マス残り
         </p>
       </div>
 

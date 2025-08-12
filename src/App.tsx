@@ -239,6 +239,7 @@ function App() {
                 regions={appState.regions || undefined}
                 validationResult={appState.validationResult}
                 showComparison={false}
+                showOriginalOnly={true}
               />
             </div>
 
